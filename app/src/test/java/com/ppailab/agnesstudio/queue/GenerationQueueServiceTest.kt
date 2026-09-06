@@ -45,7 +45,7 @@ import org.robolectric.shadows.ShadowPowerManager
 class GenerationQueueServiceTest {
     @Test
     fun `activity stop and recovery worker do not cancel foreground create or duplicate remote task`() = runBlocking {
-        val app = RuntimeEnvironment.getApplication<AgnesStudioApplication>()
+        val app = (RuntimeEnvironment.getApplication() as AgnesStudioApplication)
         runCatching { WorkManager.getInstance(app) }.getOrElse {
             WorkManager.initialize(app, Configuration.Builder().build())
             WorkManager.getInstance(app)
@@ -112,7 +112,7 @@ class GenerationQueueServiceTest {
 
     @Test
     fun `empty queue does not start a foreground service`() {
-        val app = RuntimeEnvironment.getApplication<AgnesStudioApplication>()
+        val app = (RuntimeEnvironment.getApplication() as AgnesStudioApplication)
         app.graph.generationQueue.startFromUser()
         assertEquals(null, shadowOf(app).nextStartedService)
     }
