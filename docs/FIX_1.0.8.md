@@ -1,6 +1,12 @@
 # 1.0.8 候选修复：视频素材上传后的后台取消
 
-状态：源码改动和回归用例已完成，尚未编译、运行测试或生成新版 APK。
+状态：2026-09-06 已通过 [GitHub Actions 验证](https://github.com/zjjxwpstcnsm-gif/agnes-studio/actions/runs/34012525330)，对应代码提交 `d73157308e6e23e9b5b3f96046e8c36f7e0d548e`。
+
+- Lint：0 个错误。
+- 单元/Robolectric 测试：42 条通过，0 失败、0 错误、0 跳过。
+- 主 APK 和仪器测试 APK：编译成功；仪器测试未在模拟器或真机上执行。
+- 主 APK：`1.0.8 (9)`，SHA-256 为 `cc5715c5edf375b7e6e89f2ef78f51e5bae6f992aa79862d96dd6d8cdac48d1e`。
+- 本版本未进行真实图床上传和 Agnes 视频生成调用。
 
 ## 对应故障
 
@@ -17,9 +23,10 @@
 - `AppDatabase.kt`：迟到状态更新不得覆盖用户取消；保存视频 ID 时也不复活已取消任务；恢复不覆盖终态。
 - `AppViewModel.kt`：用户取消终止实际执行，重新排队等待旧执行完成清理。
 - `GenerationQueue.kt`：记录 Worker ID/停止原因；8 分钟工作窗口到期后交回 WorkManager；系统取消不被吞掉。
+- 停止原因接口仅在 Android 12 及以上读取，旧系统仍记录 Worker ID 和停止状态；首轮 CI 发现的 API 版本兼容错误已修复。
 - 视频限流槽位移到素材准备完成、真正发送 POST 前；结果轮询仍为 30 秒。
 
-## 回归用例（已添加，尚未执行）
+## 回归用例（已执行通过）
 
 - 上传过程中取消父协程：验证 HTTP Call 被取消，不再尝试下一图床。
 - 上传成功并写入缓存后、结果交付前取消：验证缓存存在，恢复后不再上传。
@@ -36,12 +43,13 @@
 
 项目仓库为 [`zjjxwpstcnsm-gif/agnes-studio`](https://github.com/zjjxwpstcnsm-gif/agnes-studio)，由用户设置为公开。`.github/workflows/android.yml` 已配置自动构建、手动触发和测试报告上传；具体结果以该次 Actions 运行记录为准，不把源码提交视为验证通过。
 
-## 当前构建障碍
+## 构建与安装限制
 
-- 原 Android SDK、Gradle 缓存已随环境维护清理。
-- 下载工具链的网络审批被取消，无法取得构建依赖。本次没有绕过该限制。
+- 本地 Android 工具链不可用，本次在新建仓库的 GitHub Actions 中完成了构建和测试。
 - 现有可恢复文件中未找到 1.0.7 的签名私钥。旧证书 SHA-256 为
   `a59fefc73e88b797d3b3b9a2d82bcb63731ea57ac3ffb1240926f0f8134f2036`。
+- 本次 CI 调试包证书 SHA-256 为
+  `a59c8baad0522442a7fa4c4cbed2a3ffddefe502a2d19ecc453b9de8687d22e0`，与旧版不同。
 - 旧 APK 不含可用于重新签名的私钥；没有同一签名密钥就不能覆盖安装并继承旧应用数据。
   可选择恢复原密钥，或者经用户确认后改成与旧应用并存的新安装包；不要直接卸载旧应用。
 
