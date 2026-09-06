@@ -1,6 +1,7 @@
 package com.ppailab.agnesstudio.queue
 
 import android.content.Context
+import android.os.Build
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
@@ -41,7 +42,14 @@ class GenerationQueueWorker(
     override suspend fun doWork(): Result {
         val graph = (applicationContext as AgnesStudioApplication).graph
         return try {
-            graph.queueProcessor.drain(id.toString()) { "code=$stopReason, isStopped=$isStopped" }
+            graph.queueProcessor.drain(id.toString()) {
+                val reason = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    stopReason.toString()
+                } else {
+                    "unavailable_on_api_${Build.VERSION.SDK_INT}"
+                }
+                "code=$reason, isStopped=$isStopped"
+            }
             Result.success()
         } catch (elapsed: TimeoutCancellationException) {
             // Our bounded work window yields back to WorkManager. Cancellation of
