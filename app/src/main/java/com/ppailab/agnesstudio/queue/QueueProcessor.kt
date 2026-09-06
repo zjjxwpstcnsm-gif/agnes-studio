@@ -31,15 +31,15 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -54,32 +54,57 @@ class QueueProcessor(
     private val fileStore: MediaFileStore,
     private val uploader: TemporaryMediaUploader,
     private val json: Json,
+    private val nowMillis: () -> Long = System::currentTimeMillis,
 ) {
     // WorkManager may start a replacement before the stopped worker's HTTP
     // callbacks finish. Share one gate for the whole application process.
     private val drainMutex = Mutex()
     private val activeJobs = ConcurrentHashMap<String, Job>()
+    private val wakeups = Channel<Unit>(Channel.CONFLATED)
+
+    fun wake() {
+        wakeups.trySend(Unit)
+    }
 
     suspend fun drain(workerId: String = "local", stopReason: () -> String = { "unknown" }) {
         drainMutex.withLock {
-            withTimeout(MAX_WORKER_LIFETIME) {
-                while (true) {
-                    currentCoroutineContext().ensureActive()
-                    val now = System.currentTimeMillis()
-                    val job = database.nextRunnableJob(now)
-                    if (job == null) {
-                        val next = database.earliestNextAttempt() ?: return@withTimeout
-                        delay((next - now).coerceIn(500L, 30_000L))
-                        continue
-                    }
-                    processOwned(job, workerId, stopReason)
+            while (true) {
+                currentCoroutineContext().ensureActive()
+                val now = nowMillis()
+                val job = database.nextRunnableJob(now)
+                if (job == null) {
+                    val next = database.earliestNextAttempt() ?: return@withLock
+                    // New submissions and cancellations wake this delay immediately.
+                    // Keep the foreground service alive across rate windows and polls.
+                    withTimeoutOrNull((next - now).coerceIn(1L, 30_000L)) { wakeups.receive() }
+                    continue
                 }
+                processOwned(job, workerId, stopReason)
             }
+        }
+    }
+
+    /** Recovery jobs do not wait for a service owner, rate windows or future polls. */
+    suspend fun drainReady(
+        workerId: String,
+        foregroundRunning: () -> Boolean,
+        stopReason: () -> String,
+    ) {
+        if (foregroundRunning() || !drainMutex.tryLock()) return
+        try {
+            while (!foregroundRunning()) {
+                currentCoroutineContext().ensureActive()
+                val job = database.nextRunnableJob(nowMillis()) ?: return
+                processOwned(job, workerId, stopReason)
+            }
+        } finally {
+            drainMutex.unlock()
         }
     }
 
     fun cancel(jobId: String) {
         activeJobs[jobId]?.cancel(CancellationException("User cancelled generation"))
+        wake()
     }
 
     suspend fun awaitStopped(jobId: String) {
@@ -529,7 +554,4 @@ class QueueProcessor(
         val urls: Map<String, String>,
     )
 
-    private companion object {
-        const val MAX_WORKER_LIFETIME = 8 * 60_000L
-    }
 }

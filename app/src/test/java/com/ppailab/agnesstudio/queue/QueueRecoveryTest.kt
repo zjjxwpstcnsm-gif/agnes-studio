@@ -31,6 +31,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -214,6 +218,77 @@ class QueueRecoveryTest {
         }
     }
 
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `foreground drain survives more than eight minutes without yielding to scheduler`() = runTest {
+        val fixture = Fixture { error("No request is due yet") }
+        val base = System.currentTimeMillis()
+        fixture.database.updateJob(fixture.jobId, JobStatus.WAITING_RATE_LIMIT, nextAttemptAt = base + 10 * 60_000L)
+        val processor = fixture.processor { base + testScheduler.currentTime }
+        val service = launch { processor.drain("foreground-service") }
+        try {
+            runCurrent()
+            advanceTimeBy(9 * 60_000L)
+            runCurrent()
+            assertTrue(service.isActive)
+            assertEquals(JobStatus.WAITING_RATE_LIMIT, fixture.database.job(fixture.jobId)?.status)
+        } finally {
+            service.cancelAndJoin()
+            fixture.close()
+        }
+    }
+
+    @Test
+    fun `new submission wakes a drain waiting for a later rate slot`() = runBlocking {
+        val creates = AtomicInteger()
+        val fixture = Fixture { chain ->
+            when (chain.request().url.host) {
+                "uguu.se" -> response(chain, """{"success":true,"files":[{"url":"https://files.example/ref.png"}]}""")
+                else -> {
+                    creates.incrementAndGet()
+                    response(chain, """{"video_id":"video-woken","status":"queued"}""")
+                }
+            }
+        }
+        fixture.database.updateJob(fixture.jobId, JobStatus.WAITING_RATE_LIMIT,
+            nextAttemptAt = System.currentTimeMillis() + 300_000)
+        val processor = fixture.processor()
+        val service = launch(Dispatchers.Default) { processor.drain("foreground-service") }
+        try {
+            delay(100) // Let the owner enter its timed wait.
+            val original = requireNotNull(fixture.database.job(fixture.jobId))
+            val newId = requireNotNull(fixture.database.enqueueJob(Modality.VIDEO, original.prompt, original.specJson, 10).jobId)
+            processor.wake()
+            withTimeout(3_000) {
+                while (fixture.database.job(newId)?.remoteId == null) delay(10)
+            }
+            // A recovery worker cannot queue behind this long-lived service or cancel its POST.
+            withTimeout(500) { processor.drainReady("recovery", { false }, { "test" }) }
+            assertTrue(service.isActive)
+            assertEquals(1, creates.get())
+            assertEquals("video-woken", fixture.database.job(newId)?.remoteId)
+        } finally {
+            service.cancelAndJoin()
+            fixture.close()
+        }
+    }
+
+    @Test
+    fun `interrupted creation resumes immediately while polling keeps its floor`() {
+        val fixture = Fixture { error("No HTTP request expected") }
+        try {
+            fixture.database.updateJob(fixture.jobId, JobStatus.SENDING)
+            val before = System.currentTimeMillis()
+            fixture.database.recoverInterruptedJob(fixture.jobId)
+            assertTrue(requireNotNull(fixture.database.job(fixture.jobId)).nextAttemptAt < before + 1_000)
+            fixture.database.recordVideoCreated(fixture.jobId, "video-existing", 10)
+            fixture.database.recoverInterruptedJob(fixture.jobId)
+            assertTrue(requireNotNull(fixture.database.job(fixture.jobId)).nextAttemptAt >= before + 30_000)
+        } finally {
+            fixture.close()
+        }
+    }
+
     private class Fixture(interceptor: Interceptor) {
         private val context: Application = RuntimeEnvironment.getApplication()
         val json = Json { encodeDefaults = true; ignoreUnknownKeys = true }
@@ -246,9 +321,9 @@ class QueueRecoveryTest {
             jobId = requireNotNull(database.enqueueJob(Modality.VIDEO, spec.prompt, json.encodeToString(spec), 10).jobId)
         }
 
-        fun processor() = QueueProcessor(
+        fun processor(nowMillis: () -> Long = System::currentTimeMillis) = QueueProcessor(
             database, settings, { "test-only-key" }, api, PayloadBuilder(json),
-            MediaFileStore(context, client), TemporaryMediaUploader(client), json,
+            MediaFileStore(context, client), TemporaryMediaUploader(client), json, nowMillis,
         )
 
         fun reopenDatabase() {

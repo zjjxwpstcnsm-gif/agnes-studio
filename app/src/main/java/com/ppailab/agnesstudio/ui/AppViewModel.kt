@@ -139,7 +139,7 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
             _keySaved.value = graph.credentials.hasKey()
         }.onSuccess {
             notice(if (_keySaved.value) "API Key 已加密保存在本机" else "API Key 已清除")
-            if (_keySaved.value) graph.generationQueue.kick()
+            if (_keySaved.value) graph.generationQueue.startFromUser()
         }.onFailure {
             notice("无法安全保存 API Key：${it.message ?: "Android Keystore 不可用"}", true)
         }
@@ -175,7 +175,7 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
             maxRetries = value.maxRetries.coerceIn(0, 12),
             requestTimeoutSeconds = value.requestTimeoutSeconds.coerceIn(30, 600),
         ))
-        graph.generationQueue.kick()
+        graph.generationQueue.startFromUser()
     }
 
     fun updateChatParameters(value: ChatParameters): Boolean = runCatching {
@@ -511,7 +511,7 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
                         )
                     }
                     _imageAttachments.value = emptyList()
-                    graph.generationQueue.kick()
+                    graph.generationQueue.startFromUser()
                     notice("图片任务已进入队列 · 当前第 ${receipt.position} 位")
                 } else notice(receipt.error ?: "图片任务未入队", true)
             }.onFailure { notice(it.message ?: "图片参数不合法", true) }
@@ -548,7 +548,7 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
                         )
                     }
                     _videoAttachments.value = emptyList()
-                    graph.generationQueue.kick()
+                    graph.generationQueue.startFromUser()
                     notice("视频任务已进入持久队列 · 当前第 ${receipt.position} 位")
                 } else notice(receipt.error ?: "视频任务未入队", true)
             }.onFailure { notice(it.message ?: "视频参数不合法", true) }
@@ -567,7 +567,7 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
             graph.queueProcessor.awaitStopped(id)
             graph.database.retryJob(id)
             graph.database.addJobLog(id, JobLogLevel.INFO, "用户操作", "任务已手动重新排队")
-            graph.generationQueue.kick()
+            graph.generationQueue.startFromUser()
             notice("任务已重新排队")
         }
     }

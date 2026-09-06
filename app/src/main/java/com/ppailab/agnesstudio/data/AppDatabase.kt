@@ -417,7 +417,7 @@ class AppDatabase(
             if (current.remoteId == null) JobStatus.QUEUED else JobStatus.PROCESSING,
             nextAttemptAt = maxOf(
                 current.nextAttemptAt,
-                System.currentTimeMillis() + QueueTimingPolicy.VIDEO_POLL_INTERVAL_MILLIS,
+                System.currentTimeMillis() + QueueTimingPolicy.minimumRetryDelayMillis(current),
             ),
             errorMessage = "后台执行已暂停，已保存的素材和任务将在调度恢复后继续使用。",
         )

@@ -15,7 +15,7 @@ import okhttp3.OkHttpClient
 
 class AgnesStudioApplication : Application() {
     lateinit var graph: AppGraph
-        private set
+        internal set
 
     override fun onCreate() {
         super.onCreate()
@@ -35,7 +35,6 @@ class AgnesStudioApplication : Application() {
         val fileStore = MediaFileStore(this, httpClient)
         val uploader = TemporaryMediaUploader(httpClient)
         val payloadBuilder = PayloadBuilder(json)
-        val generationQueue = GenerationQueue(this)
         val processor = QueueProcessor(
             database = database,
             settingsStore = settings,
@@ -46,6 +45,7 @@ class AgnesStudioApplication : Application() {
             uploader = uploader,
             json = json,
         )
+        val generationQueue = GenerationQueue(this, database, processor)
         graph = AppGraph(
             json = json,
             database = database,
