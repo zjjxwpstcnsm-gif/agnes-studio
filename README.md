@@ -70,7 +70,7 @@
 
 ## 安装
 
-当前版本为 `1.0.9 (10)`，修复切到其他 App 后创建请求被中断、后续调度延迟的问题。改动与验收见 [`docs/FIX_1.0.9.md`](docs/FIX_1.0.9.md)。APK 位于对应 GitHub Actions 运行的 `AgnesStudio-debug` Artifact 中。
+当前版本为 `1.0.9 (10)`，修复切到其他 App 后创建请求被中断、后续调度延迟的问题。[本次 CI](https://github.com/zjjxwpstcnsm-gif/agnes-studio/actions/runs/34024760787) 的 47 项测试全部通过，Lint 无错误，APK 签名验证通过。改动与验收见 [`docs/FIX_1.0.9.md`](docs/FIX_1.0.9.md)。APK 位于对应 GitHub Actions 运行的 `AgnesStudio-debug` Artifact 中。
 
 安装前请先阅读下方签名限制，再按以下方式操作：
 

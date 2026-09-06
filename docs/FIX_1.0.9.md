@@ -22,8 +22,15 @@ WorkManager 调度不承诺秒级执行。Android 16 下连使用前台服务的
 
 ## 验证
 
-代码和回归用例已完成，本地 diff/Manifest/补丁检查通过。用户已明确授权公开推送与构建。
-当前提交由 GitHub Actions 验证，具体通过状态以本次 CI 结果为准。
+2026-09-06 已通过 [GitHub Actions](https://github.com/zjjxwpstcnsm-gif/agnes-studio/actions/runs/34024760787)，
+构建代码提交 `47e5d5c4bae3a786d9b18ae8de7b2a224a5fa715`。
+
+- 47 项 JVM/Robolectric 测试全部通过：0 失败、0 错误、0 跳过。
+- Lint：0 错误，12 条警告。
+- 主 APK 与仪器测试 APK 编译成功；仪器测试 APK 未在真机/模拟器执行。
+- APK：`com.ppailab.agnesstudio`，版本 `1.0.9 (10)`，22,162,588 字节。
+- APK SHA-256：`9f7525fc4696d45146dc72ef3367a280da1da9e43929749495d8ff92e0631da2`。
+- APK v2 签名验证通过；下载后的 Artifact ZIP 与 APK 均已核对 SHA-256。
 
 CI 执行 `lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest`。
 新增测试覆盖：切后台期间 HTTP 仍完成并保存 ID；恢复 Worker 不重复创建；通知和唤醒锁生命周期；
@@ -35,7 +42,9 @@ CI 执行 `lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest`�
 ## 安装和平台边界
 
 不能从旧 APK 还原签名私钥；1.0.8 的 GitHub Actions 临时调试签名也没有被保存。
-新 APK 必须比较签名后才能判断是否可以覆盖安装，不能让用户通过卸载旧应用来冒险丢失历史数据。
+本次 1.0.9 APK 证书 SHA-256 为 `1bca3f1cf57ae9468ddb32a8eb21738c0935372ec72d52613197872dc9274a41`，
+与 1.0.8 CI 包的 `a59c8baad0522442a7fa4c4cbed2a3ffddefe502a2d19ecc453b9de8687d22e0` 不同，
+因此不能覆盖安装到该旧版本上；不能通过卸载旧应用来冒险丢失历史数据。
 用户主动在系统中“强行停止”或厂商禁止后台运行时，应用仍不能保证继续执行；已保存的链接和远端 ID 在下次打开后复用。
 服务端接受 POST 但响应完全丢失的情形仍需要服务端幂等/查询契约，客户端不能单独保证远端绝不重复。
 
