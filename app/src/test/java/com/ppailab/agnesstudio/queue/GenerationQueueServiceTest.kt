@@ -18,6 +18,7 @@ import com.ppailab.agnesstudio.network.TemporaryMediaUploader
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.time.Duration
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -81,7 +82,21 @@ class GenerationQueueServiceTest {
             shadowOf(Looper.getMainLooper()).idle()
             withTimeout(3_000) { while (graph.database.job(id)?.status != JobStatus.RETRY_WAIT) delay(10) }
             activity.pause().stop().destroy()
-            withTimeout(6_000) { while (graph.database.job(id)?.remoteId == null) delay(10) }
+            try {
+                withTimeout(10_000) {
+                    while (graph.database.job(id)?.remoteId == null) {
+                        // A paused Robolectric looper/Android clock does not
+                        // advance just because the host coroutine suspends.
+                        // Simulate elapsed device time, never a UI wake/kick.
+                        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(100))
+                        delay(10)
+                    }
+                }
+            } catch (error: Exception) {
+                println("Background retry state: ${graph.database.job(id)}")
+                println("Background retry logs: ${graph.database.jobLogs(id)}")
+                throw error
+            }
             assertEquals(2, creates.get())
             assertEquals("retry-after-background", graph.database.job(id)?.remoteId)
             assertTrue(queue.foregroundRunning)
