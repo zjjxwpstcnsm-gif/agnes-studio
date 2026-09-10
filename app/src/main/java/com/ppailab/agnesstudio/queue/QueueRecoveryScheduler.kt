@@ -22,6 +22,7 @@ class QueueRecoveryScheduler(private val context: Context, private val database:
         get() = preferences.getBoolean("foreground_timed_out", false)
         set(value) { preferences.edit().putBoolean("foreground_timed_out", value).apply() }
 
+    @Synchronized
     fun schedule(foregroundRunning: Boolean = false) {
         val next = database.earliestNextAttempt()
         if (next == null) {
@@ -39,6 +40,7 @@ class QueueRecoveryScheduler(private val context: Context, private val database:
         preferences.edit().putLong("alarm_elapsed", trigger).apply()
     }
 
+    @Synchronized
     fun alarmDelivered() {
         preferences.edit().remove("alarm_elapsed").apply()
     }

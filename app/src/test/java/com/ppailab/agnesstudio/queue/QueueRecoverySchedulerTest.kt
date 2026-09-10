@@ -3,6 +3,8 @@ package com.ppailab.agnesstudio.queue
 import android.app.AlarmManager
 import android.content.Intent
 import android.os.PowerManager
+import androidx.work.Configuration
+import androidx.work.WorkManager
 import com.ppailab.agnesstudio.AgnesStudioApplication
 import com.ppailab.agnesstudio.model.JobStatus
 import com.ppailab.agnesstudio.model.Modality
@@ -10,6 +12,7 @@ import com.ppailab.agnesstudio.model.VideoParameters
 import com.ppailab.agnesstudio.model.VideoTaskSpec
 import kotlinx.serialization.encodeToString
 import org.junit.Assert.*
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -23,6 +26,16 @@ class QueueRecoverySchedulerTest {
     private val app get() = RuntimeEnvironment.getApplication() as AgnesStudioApplication
     private val queue get() = app.graph.generationQueue
     private val alarms get() = shadowOf(app.getSystemService(AlarmManager::class.java))
+
+    @Before
+    fun initializeWorkManager() {
+        runCatching { WorkManager.getInstance(app) }.getOrElse {
+            // This suite verifies scheduling/handoff; HTTP execution is covered
+            // by the service/processor tests, not real workers in this fixture.
+            WorkManager.initialize(app, Configuration.Builder().setExecutor { }.build())
+            WorkManager.getInstance(app)
+        }
+    }
 
     private fun enqueue(): String {
         val spec = VideoTaskSpec("recovery test", VideoParameters(), emptyList())

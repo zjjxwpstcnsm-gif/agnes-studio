@@ -31,6 +31,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -43,6 +44,15 @@ import org.robolectric.shadows.ShadowPowerManager
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], application = AgnesStudioApplication::class)
 class GenerationQueueServiceTest {
+    @Before
+    fun initializeWorkManager() {
+        val app = RuntimeEnvironment.getApplication() as AgnesStudioApplication
+        runCatching { WorkManager.getInstance(app) }.getOrElse {
+            WorkManager.initialize(app, Configuration.Builder().build())
+            WorkManager.getInstance(app)
+        }
+    }
+
     @Test
     fun `queue full retries after activity closes without another user wakeup`() = runBlocking {
         val app = RuntimeEnvironment.getApplication() as AgnesStudioApplication
@@ -89,10 +99,6 @@ class GenerationQueueServiceTest {
     @Test
     fun `activity stop and recovery worker do not cancel foreground create or duplicate remote task`() = runBlocking {
         val app = (RuntimeEnvironment.getApplication() as AgnesStudioApplication)
-        runCatching { WorkManager.getInstance(app) }.getOrElse {
-            WorkManager.initialize(app, Configuration.Builder().build())
-            WorkManager.getInstance(app)
-        }
         val graph = app.graph
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
