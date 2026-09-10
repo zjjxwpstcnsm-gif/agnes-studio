@@ -18,7 +18,6 @@ import com.ppailab.agnesstudio.network.TemporaryMediaUploader
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
-import java.time.Duration
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -63,6 +62,9 @@ class GenerationQueueServiceTest {
             val attempt = creates.incrementAndGet()
             Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
                 .code(if (attempt == 1) 503 else 200).message("test")
+                // Keep production's 60-second default intact; this simulated
+                // provider explicitly permits a shorter retry in the test.
+                .header("Retry-After", "1")
                 .body((if (attempt == 1) """{"code":"video_queue_full","message":"video queue is full"}"""
                     else """{"video_id":"retry-after-background","status":"queued"}""")
                     .toResponseBody("application/json".toMediaType())).build()
@@ -83,15 +85,7 @@ class GenerationQueueServiceTest {
             withTimeout(3_000) { while (graph.database.job(id)?.status != JobStatus.RETRY_WAIT) delay(10) }
             activity.pause().stop().destroy()
             try {
-                withTimeout(10_000) {
-                    while (graph.database.job(id)?.remoteId == null) {
-                        // A paused Robolectric looper/Android clock does not
-                        // advance just because the host coroutine suspends.
-                        // Simulate elapsed device time, never a UI wake/kick.
-                        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(100))
-                        delay(10)
-                    }
-                }
+                withTimeout(8_000) { while (graph.database.job(id)?.remoteId == null) delay(10) }
             } catch (error: Exception) {
                 println("Background retry state: ${graph.database.job(id)}")
                 println("Background retry logs: ${graph.database.jobLogs(id)}")
