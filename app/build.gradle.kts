@@ -10,11 +10,13 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.ppailab.agnesstudio"
+        val backgroundPreview = providers.gradleProperty("backgroundPreview").orNull == "true"
+        applicationId = if (backgroundPreview) "com.ppailab.agnesstudio.background" else "com.ppailab.agnesstudio"
+        manifestPlaceholders["appLabel"] = if (backgroundPreview) "Agnes Studio 后台版" else "Agnes Studio"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10
-        versionName = "1.0.9"
+        versionCode = 11
+        versionName = "1.0.10"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

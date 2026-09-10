@@ -3,6 +3,7 @@ package com.ppailab.agnesstudio.queue
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.PowerManager
 import androidx.core.content.ContextCompat
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
@@ -28,6 +29,7 @@ class GenerationQueue(
 ) {
     private val context = context.applicationContext
     private val workManager get() = WorkManager.getInstance(context)
+    internal val recovery = QueueRecoveryScheduler(this.context, database)
 
     @Volatile
     internal var foregroundRunning = false
@@ -35,6 +37,13 @@ class GenerationQueue(
     /** Call synchronously from a visible Activity/user action, before switching apps. */
     fun startFromUser() {
         if (database.earliestNextAttempt() == null) return
+        // A visible Activity resets Android's dataSync time budget.
+        recovery.foregroundTimedOut = false
+        recovery.logRecovery("visible_activity")
+        startForeground()
+    }
+
+    private fun startForeground() {
         processor.wake()
         try {
             ContextCompat.startForegroundService(context, Intent(context, GenerationQueueService::class.java))
@@ -43,6 +52,27 @@ class GenerationQueue(
             foregroundUnavailable(error)
         } catch (error: SecurityException) {
             foregroundUnavailable(error)
+        }
+    }
+
+    internal fun recoverFromSystem(source: String, allowForeground: Boolean = true) {
+        recovery.schedule(foregroundRunning)
+        if (database.earliestNextAttempt() == null) return
+        recovery.logRecovery(source)
+        processor.wake()
+        if (foregroundRunning) return
+        val unrestricted = context.getSystemService(PowerManager::class.java)
+            .isIgnoringBatteryOptimizations(context.packageName)
+        if (allowForeground && unrestricted && !recovery.foregroundTimedOut) {
+            startForeground()
+        } else {
+            // Separate coalesced work avoids KEEP hiding this wakeup behind a
+            // delayed request, without REPLACE cancelling an in-flight POST.
+            val request = OneTimeWorkRequestBuilder<GenerationQueueWorker>()
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .addTag(WORK_NAME)
+                .build()
+            workManager.enqueueUniqueWork("$WORK_NAME-wakeup", ExistingWorkPolicy.KEEP, request)
         }
     }
 
@@ -59,6 +89,7 @@ class GenerationQueue(
 
     /** Durable fallback only; never the primary executor for a user submission. */
     fun kick(delayMillis: Long = 0L, append: Boolean = false) {
+        recovery.schedule(foregroundRunning)
         if (database.earliestNextAttempt() == null) return
         val request = OneTimeWorkRequestBuilder<GenerationQueueWorker>()
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())

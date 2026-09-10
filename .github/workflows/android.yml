@@ -47,3 +47,14 @@ jobs:
             app/build/outputs/apk/debug/app-debug.apk
             app/build/outputs/apk/debug/APK-*.txt
           if-no-files-found: error
+      - name: Build parallel installation for legacy signing-key loss
+        run: |
+          ./gradlew --no-daemon assembleDebug -PbackgroundPreview=true
+          mkdir -p background-apk
+          cp app/build/outputs/apk/debug/app-debug.apk background-apk/AgnesStudio-background.apk
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" background-apk/apksigner.jar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AgnesStudio-background
+          path: background-apk/
+          if-no-files-found: error

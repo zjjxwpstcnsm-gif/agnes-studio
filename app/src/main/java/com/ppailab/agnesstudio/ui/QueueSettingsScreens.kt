@@ -115,6 +115,7 @@ fun QueueScreen(viewModel: AppViewModel) {
             progress = { activeCount.toFloat() / settings.maxQueueSize.coerceAtLeast(1) },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         )
+        if (activeCount > 0) BackgroundExecutionCard(compact = true)
         Row(
             Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -390,6 +391,7 @@ fun SettingsScreen(viewModel: AppViewModel) {
                 "Agnes Studio ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) · 密钥、限流、队列与网络策略",
             )
         }
+        item { BackgroundExecutionCard() }
         item {
             SettingsCard("Agnes 连接") {
                 Row(verticalAlignment = Alignment.CenterVertically) {

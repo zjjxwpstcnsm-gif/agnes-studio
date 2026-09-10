@@ -44,6 +44,49 @@ import org.robolectric.shadows.ShadowPowerManager
 @Config(sdk = [28], application = AgnesStudioApplication::class)
 class GenerationQueueServiceTest {
     @Test
+    fun `queue full retries after activity closes without another user wakeup`() = runBlocking {
+        val app = RuntimeEnvironment.getApplication() as AgnesStudioApplication
+        val graph = app.graph
+        val creates = AtomicInteger()
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            val attempt = creates.incrementAndGet()
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(if (attempt == 1) 503 else 200).message("test")
+                .body((if (attempt == 1) """{"code":"video_queue_full","message":"video queue is full"}"""
+                    else """{"video_id":"retry-after-background","status":"queued"}""")
+                    .toResponseBody("application/json".toMediaType())).build()
+        }.build()
+        graph.settings.updateApp(AppSettings(baseUrl = "https://agnes.example", accessPlan = AccessPlan.CUSTOM, customVideoRpm = 100))
+        val processor = QueueProcessor(graph.database, graph.settings, { "test-key" },
+            AgnesApiClient(client, graph.json), graph.payloadBuilder, MediaFileStore(app, client),
+            TemporaryMediaUploader(client), graph.json)
+        val queue = GenerationQueue(app, graph.database, processor)
+        app.graph = graph.copy(queueProcessor = processor, generationQueue = queue)
+        val spec = VideoTaskSpec("background retry", VideoParameters(), emptyList())
+        val id = requireNotNull(graph.database.enqueueJob(Modality.VIDEO, spec.prompt, graph.json.encodeToString(spec), 10).jobId)
+        val activity = Robolectric.buildActivity(Activity::class.java).setup()
+        val service = Robolectric.buildService(GenerationQueueService::class.java).create()
+        try {
+            service.startCommand(0, 1)
+            shadowOf(Looper.getMainLooper()).idle()
+            withTimeout(3_000) { while (graph.database.job(id)?.status != JobStatus.RETRY_WAIT) delay(10) }
+            activity.pause().stop().destroy()
+            withTimeout(6_000) { while (graph.database.job(id)?.remoteId == null) delay(10) }
+            assertEquals(2, creates.get())
+            assertEquals("retry-after-background", graph.database.job(id)?.remoteId)
+            assertTrue(queue.foregroundRunning)
+            assertTrue(graph.database.jobLogs(id).any { it.stage == "重试计划" })
+        } finally {
+            graph.database.cancelJob(id)
+            processor.cancel(id)
+            service.destroy()
+            shadowOf(Looper.getMainLooper()).idle()
+            client.dispatcher.executorService.shutdown()
+            client.connectionPool.evictAll()
+        }
+    }
+
+    @Test
     fun `activity stop and recovery worker do not cancel foreground create or duplicate remote task`() = runBlocking {
         val app = (RuntimeEnvironment.getApplication() as AgnesStudioApplication)
         runCatching { WorkManager.getInstance(app) }.getOrElse {

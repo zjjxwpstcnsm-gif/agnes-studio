@@ -486,6 +486,10 @@ class QueueProcessor(
                 errorMessage = failure.userMessage,
                 httpStatus = failure.statusCode,
             )
+            val retryAt = requireNotNull(database.job(job.id)).nextAttemptAt
+            log(job.id, JobLogLevel.INFO, "重试计划",
+                "第 $attempts 次异常，可自动重试；计划等待 ${wait / 1_000} 秒，实际发送仍遵守限流窗口。",
+                "next_attempt_at=$retryAt\nmax_retries=$maxRetries")
         } else {
             database.updateJob(
                 job.id,
@@ -495,6 +499,8 @@ class QueueProcessor(
                 errorMessage = failure.userMessage,
                 httpStatus = failure.statusCode,
             )
+            if (failure.retryable) log(job.id, JobLogLevel.ERROR, "重试结束",
+                "已达到自动重试上限（$maxRetries），任务停止；可在队列中手动重试。")
         }
     }
 
