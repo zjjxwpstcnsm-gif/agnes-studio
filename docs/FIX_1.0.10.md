@@ -33,7 +33,21 @@
 CI 运行 Lint、JVM/Robolectric 测试、主 APK 和仪器测试 APK 构建。
 新增回归场景：503 后关闭 Activity 仍重试成功；恢复闹钟不会被重复推迟；
 取消后撤销闹钟；放行后的服务恢复保留远端 ID；Android 15 启动限制和超时标记；
-长时间迟到的恢复日志。具体结果在构建完成后记录。
+长时间迟到的恢复日志。
+
+已通过 [GitHub Actions 34542975830](https://github.com/zjjxwpstcnsm-gif/agnes-studio/actions/runs/34542975830)，
+构建提交 `4301479431b8ac0345d323612ed2bf67b01992d6`。
+
+- 53 项测试：0 失败、0 错误、0 跳过。
+- Lint：0 错误、20 条警告（依赖版本、KTX 建议、目标 SDK 和未用资源）。
+- 主 APK、仪器测试 APK、并存后台版 APK 均编译成功；仪器测试未在设备执行。
+- 后台版交付 APK：`AgnesStudio-v1.0.10-background.apk`，22,198,157 字节。
+- APK SHA-256：`2b056e1cad97de09642db2957c10331f5f76654aa8bb84d42fa6346abe7a13de`。
+- v2 / v3 签名校验通过；重签前后所有应用载荷条目哈希一致。
+- 解析最终 APK 确认包名 `com.ppailab.agnesstudio.background`，版本 `1.0.10 (11)`，最低 API 26，目标 API 35。
+- 固定证书 SHA-256：`1baf80c86e2a11d37ea8fa93c4b7183cfdd0320dcf38e4dbad650dd3c6c430b9`。
+- 私有签名备份名称：`AgnesStudio-background-signing-backup.zip`；已单独保存，不在仓库或 CI 中。
+  后续交付必须找回此备份重签，不能临时换证书或把私钥放入公共工作流。
 
 未连接用户真机，不能把 Robolectric 测试等同于荣耀手机整夜熄屏实测。
 真机验收：允许后台运行和通知，荣耀启动管理允许三个选项；提交任务后锁屏，
