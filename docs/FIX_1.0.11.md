@@ -18,7 +18,18 @@
 Android CI 执行 Lint、JVM/Robolectric 测试、主 APK、仪器测试 APK 和后台版 APK 构建。
 新增测试覆盖：图片历史参数与限流、视频新 ID、缓存复用、失效重传、排队期间过期与 SQLite 重开、丢失原素材、队列容量、处理中原记录不变、旧缓存无过期时间、关闭中转，以及按钮反馈/防连点。
 
-最终 CI、APK 校验与签名结果在交付后补录。未连接真机，不把 Robolectric 等同于设备验收。
+已通过 [Android CI 34741047791](https://github.com/zjjxwpstcnsm-gif/agnes-studio/actions/runs/34741047791)，构建提交 `7de2dcdf2e53ac71dd1eb2410adbb99fc458fd8e`。
+
+- 64 项测试：0 失败、0 错误、0 跳过；Lint：0 错误、20 条既有警告。
+- 主 APK、仪器测试 APK 和后台版 APK 构建成功。仪器测试未在设备上执行。
+- 交付：`AgnesStudio-v1.0.11-background.apk`，22,214,541 字节。
+- APK SHA-256：`be8d60546df43a3e8b134d70854513c602080d593760243b83605a6e0ae4d661`。
+- v2 / v3 签名校验通过，证书与 1.0.10 后台版完全一致。
+- 二进制 Manifest 已确认包名 `com.ppailab.agnesstudio.background`、版本 `1.0.11 (12)`。
+- 重签前后所有非 META-INF 应用载荷条目 SHA-256 一致。
+- 首轮新测试的时间模拟未推进 JVM 系统时钟；修正为对持久时间戳模拟经过一个限流窗口后，完整 CI 通过。产品限流逻辑未为测试放宽。
+
+未连接真机，不把 Robolectric 等同于设备验收。
 
 ## 安装与签名
 
