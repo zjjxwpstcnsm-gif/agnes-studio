@@ -7,7 +7,6 @@ import com.ppailab.agnesstudio.data.SettingsStore
 import com.ppailab.agnesstudio.model.*
 import com.ppailab.agnesstudio.network.*
 import java.io.File
-import java.time.Duration
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -26,7 +25,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import org.robolectric.shadows.ShadowSystemClock
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], application = Application::class)
@@ -91,7 +89,7 @@ class DuplicateGenerationTest {
         processor().drainReady("test", { false }, { "test" })
         assertEquals(JobStatus.WAITING_RATE_LIMIT, database.job(copyId)?.status)
         assertTrue(creates.isEmpty())
-        ShadowSystemClock.advanceBy(Duration.ofMillis(61_000))
+        elapseRateWait(copyId)
         processor().drainReady("test", { false }, { "test" })
         assertEquals(JobStatus.SUCCEEDED, database.job(copyId)?.status)
         assertEquals(1, creates.size)
@@ -131,7 +129,7 @@ class DuplicateGenerationTest {
         assertTrue(creates.isEmpty())
         database.close()
         database = AppDatabase(context, json)
-        ShadowSystemClock.advanceBy(Duration.ofMillis(61_000))
+        elapseRateWait(copyId)
         processor().drainReady("after-restart", { false }, { "test" })
         assertEquals(1, uploads)
         assertEquals(1, creates.size)
@@ -198,6 +196,20 @@ class DuplicateGenerationTest {
         assertNull(copy.resultPath)
         assertNull(copy.resultUrl)
         assertNull(copy.errorKind)
+    }
+
+    private fun elapseRateWait(id: String) {
+        // Robolectric uptime does not advance java.lang.System wall time used
+        // by SQLite deadlines. Age the persisted timestamps by one rate window.
+        database.writableDatabase.execSQL("UPDATE rate_events SET occurred_at = occurred_at - 61000")
+        val copy = requireNotNull(database.job(id))
+        if (copy.modality == Modality.VIDEO) {
+            val spec = json.decodeFromString<VideoTaskSpec>(copy.specJson)
+            database.updateJobSpec(id, json.encodeToString(spec.copy(attachments = spec.attachments.map {
+                it.copy(remoteUrlExpiresAt = it.remoteUrlExpiresAt?.minus(61_000L))
+            })))
+        }
+        database.updateJob(id, JobStatus.WAITING_RATE_LIMIT, nextAttemptAt = System.currentTimeMillis())
     }
 
     private fun processor() = QueueProcessor(database, settings, { "test-only-key" },
