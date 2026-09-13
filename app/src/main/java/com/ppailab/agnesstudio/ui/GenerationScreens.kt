@@ -59,6 +59,7 @@ fun ImageScreen(viewModel: AppViewModel, onOpenQueue: () -> Unit) {
     val parameters by viewModel.imageParameters.collectAsStateWithLifecycle()
     val attachments by viewModel.imageAttachments.collectAsStateWithLifecycle()
     val jobs by viewModel.jobs.collectAsStateWithLifecycle()
+    val deletingJobIds by viewModel.deletingJobIds.collectAsStateWithLifecycle()
     var prompt by remember { mutableStateOf("") }
     var showUrlDialog by remember { mutableStateOf(false) }
     var settingsJobId by remember { mutableStateOf<String?>(null) }
@@ -162,6 +163,8 @@ fun ImageScreen(viewModel: AppViewModel, onOpenQueue: () -> Unit) {
                         onRetry = { viewModel.retryJob(job.id) },
                         onDuplicate = { viewModel.duplicateJob(job.id) },
                         onCancel = { viewModel.cancelJob(job.id) },
+                        onDelete = { viewModel.deleteJob(job.id) },
+                        isDeleting = job.id in deletingJobIds,
                         onViewSettings = { settingsJobId = job.id },
                     )
                 }
@@ -187,6 +190,7 @@ fun VideoScreen(viewModel: AppViewModel, onOpenQueue: () -> Unit) {
     val appSettings by viewModel.appSettings.collectAsStateWithLifecycle()
     val attachments by viewModel.videoAttachments.collectAsStateWithLifecycle()
     val jobs by viewModel.jobs.collectAsStateWithLifecycle()
+    val deletingJobIds by viewModel.deletingJobIds.collectAsStateWithLifecycle()
     var prompt by remember { mutableStateOf("") }
     var remoteRole by remember { mutableStateOf<AttachmentRole?>(null) }
     var settingsJobId by remember { mutableStateOf<String?>(null) }
@@ -448,6 +452,8 @@ fun VideoScreen(viewModel: AppViewModel, onOpenQueue: () -> Unit) {
                         onRetry = { viewModel.retryJob(job.id) },
                         onDuplicate = { viewModel.duplicateJob(job.id) },
                         onCancel = { viewModel.cancelJob(job.id) },
+                        onDelete = { viewModel.deleteJob(job.id) },
+                        isDeleting = job.id in deletingJobIds,
                         onViewSettings = { settingsJobId = job.id },
                     )
                 }

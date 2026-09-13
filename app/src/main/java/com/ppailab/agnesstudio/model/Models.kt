@@ -112,7 +112,10 @@ enum class JobStatus {
     RETRY_WAIT,
     SUCCEEDED,
     FAILED,
-    CANCELLED,
+    CANCELLED;
+
+    val isFinished: Boolean
+        get() = this == SUCCEEDED || this == FAILED || this == CANCELLED
 }
 
 enum class JobLogLevel { INFO, WARNING, ERROR }

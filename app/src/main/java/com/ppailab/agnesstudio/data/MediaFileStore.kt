@@ -5,12 +5,15 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import android.util.Base64
 import com.ppailab.agnesstudio.model.AttachmentRole
+import com.ppailab.agnesstudio.model.GenerationJob
 import com.ppailab.agnesstudio.model.MediaAttachment
 import com.ppailab.agnesstudio.network.executeCancellable
 import com.ppailab.agnesstudio.network.RelayUrlCachePolicy
 import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
+import java.nio.file.Files
+import java.nio.file.LinkOption
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -88,6 +91,22 @@ class MediaFileStore(
                 FileOutputStream(target).use { output -> input.copyTo(output) }
             }
             target.absolutePath
+        }
+    }
+
+    fun deleteGeneratedResults(job: GenerationJob) {
+        val directory = File(context.filesDir, "generated").canonicalFile
+        // Include partial downloads that never reached result_path. Only these
+        // per-job names are owned results; imported/reference files are separate.
+        val names = listOf("image-${job.id}.png", "image-${job.id}.jpg",
+            "image-${job.id}.webp", "video-${job.id}.mp4")
+        for (name in names) {
+            val file = File(directory, name)
+            if (!Files.exists(file.toPath(), LinkOption.NOFOLLOW_LINKS)) continue
+            check(file.canonicalFile.parentFile == directory && !Files.isSymbolicLink(file.toPath()) &&
+                file.isFile && file.delete()) {
+                "无法删除本机结果文件：$name。记录已保留，请稍后重试。"
+            }
         }
     }
 

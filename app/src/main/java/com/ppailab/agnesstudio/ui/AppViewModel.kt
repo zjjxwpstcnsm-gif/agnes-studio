@@ -112,6 +112,8 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
 
     private var chatJob: Job? = null
     private var lastDuplicateAt: Long? = null
+    private val _deletingJobIds = MutableStateFlow<Set<String>>(emptySet())
+    val deletingJobIds = _deletingJobIds.asStateFlow()
     private val explicitlyStoppedMessages = mutableSetOf<String>()
 
     fun selectConversation(id: String) {
@@ -562,6 +564,7 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
 
     /** A new generation, including for completed/processing videos with a remote ID. */
     fun duplicateJob(id: String): Boolean {
+        if (id in _deletingJobIds.value) return false
         val now = SystemClock.elapsedRealtime()
         if (lastDuplicateAt?.let { now - it < 1_500L } == true) return false
         if (!graph.credentials.hasKey()) {
@@ -615,7 +618,9 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
 
     fun retryJob(id: String) {
         viewModelScope.launch {
+            if (id in _deletingJobIds.value) return@launch
             graph.queueProcessor.awaitStopped(id)
+            if (id in _deletingJobIds.value || graph.database.job(id) == null) return@launch
             graph.database.retryJob(id)
             graph.database.addJobLog(id, JobLogLevel.INFO, "用户操作", "任务已手动重新排队")
             graph.generationQueue.startFromUser()
@@ -631,9 +636,40 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
         _selectedLogJobId.value = null
     }
 
-    fun clearFinishedJobs() {
-        graph.database.clearFinishedJobs()
-        notice("已清理完成、失败和取消的任务记录")
+    fun deleteJob(id: String) = clearFinishedJobs(listOf(id))
+
+    fun clearFinishedJobs(ids: List<String>) {
+        val targets = ids.distinct().filterNot { it in _deletingJobIds.value }
+        if (targets.isEmpty()) return
+        _deletingJobIds.value += targets
+        viewModelScope.launch {
+            var deleted = 0
+            var failed = 0
+            var skipped = 0
+            try {
+                for (id in targets) {
+                    try {
+                        if (graph.queueProcessor.deleteFinishedJob(id)) {
+                            deleted++
+                            if (_selectedLogJobId.value == id) closeJobLogs()
+                        } else skipped++
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        failed++
+                        notice(error.message ?: "删除失败，记录已保留，请重试", true)
+                    }
+                }
+                graph.generationQueue.kick()
+                notice(buildString {
+                    append("已删除 $deleted 条历史记录及对应本机结果")
+                    if (failed > 0) append("；$failed 条删除失败，记录已保留")
+                    if (skipped > 0) append("；$skipped 条已移除或重新执行，已跳过")
+                }, failed > 0)
+            } finally {
+                _deletingJobIds.value -= targets.toSet()
+            }
+        }
     }
 
     private fun notice(message: String, isError: Boolean = false) {

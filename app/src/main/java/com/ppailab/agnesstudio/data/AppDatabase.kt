@@ -481,9 +481,15 @@ class AppDatabase(
     }
 
     @Synchronized
-    fun clearFinishedJobs() {
-        writableDatabase.delete("jobs", "status IN ('SUCCEEDED','FAILED','CANCELLED')", null)
+    fun deleteFinishedJob(id: String, deleteFiles: (GenerationJob) -> Unit): Boolean {
+        val current = job(id) ?: return false
+        // Recheck under the same lock as retry/duplicate: never delete a job
+        // that resumed while the user was reading the confirmation dialog.
+        if (!current.status.isFinished) return false
+        deleteFiles(current) // A failed disk deletion keeps the history available for retry.
+        writableDatabase.delete("jobs", "id = ?", arrayOf(id)) // Logs cascade; rate history stays.
         changed()
+        return true
     }
 
     @Synchronized
