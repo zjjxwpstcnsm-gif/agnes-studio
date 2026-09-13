@@ -116,19 +116,32 @@ class TemporaryMediaUploaderTest {
     }
 
     @Test
-    fun `user supplied remote url does not expire locally`() {
+    fun `user supplied remote url without known expiry is preserved`() {
         val attachment = MediaAttachment(
             id = "remote-image",
             displayName = "reference.png",
             mimeType = "image/png",
             remoteUrl = "https://cdn.example/reference.png",
-            remoteUrlExpiresAt = 1L,
         )
 
         assertEquals(
             "https://cdn.example/reference.png",
             RelayUrlCachePolicy.reusableUrl(attachment, Long.MAX_VALUE),
         )
+    }
+
+    @Test
+    fun `known expired remote url without local original cannot be reused`() {
+        val attachment = MediaAttachment("remote", "frame.png", "image/png",
+            remoteUrl = "https://old.uguu.se/frame.png", remoteUrlExpiresAt = 1L)
+        assertEquals(null, RelayUrlCachePolicy.reusableUrl(attachment, 1_000_000L))
+    }
+
+    @Test
+    fun `legacy local relay without expiry is refreshed`() {
+        val attachment = MediaAttachment("legacy", "frame.png", "image/png",
+            localPath = "/local/frame.png", remoteUrl = "https://a.uguu.se/frame.png")
+        assertEquals(null, RelayUrlCachePolicy.reusableUrl(attachment))
     }
 
     @Test

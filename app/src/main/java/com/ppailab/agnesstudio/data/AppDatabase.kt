@@ -288,6 +288,20 @@ class AppDatabase(
     }
 
     @Synchronized
+    fun duplicateJob(id: String, maxQueueSize: Int): QueueReceipt {
+        val source = job(id) ?: return QueueReceipt(false, error = "原任务已被清理，无法复制")
+        // Only the request snapshot is copied. enqueueJob creates a new ID,
+        // timestamps and execution state, and enforces the shared queue limit.
+        val receipt = enqueueJob(source.modality, source.prompt, source.specJson, maxQueueSize)
+        receipt.jobId?.let { newId ->
+            addJobLog(newId, JobLogLevel.INFO, "复制并生成",
+                "已复制原任务的提示词、参数和素材 · 第 ${receipt.position} 位",
+                "source_job_id=$id")
+        }
+        return receipt
+    }
+
+    @Synchronized
     fun jobs(): List<GenerationJob> = readableDatabase.rawQuery(
         "SELECT * FROM jobs ORDER BY created_at DESC",
         null,
@@ -467,9 +481,15 @@ class AppDatabase(
     }
 
     @Synchronized
-    fun clearFinishedJobs() {
-        writableDatabase.delete("jobs", "status IN ('SUCCEEDED','FAILED','CANCELLED')", null)
+    fun deleteFinishedJob(id: String, deleteFiles: (GenerationJob) -> Unit): Boolean {
+        val current = job(id) ?: return false
+        // Recheck under the same lock as retry/duplicate: never delete a job
+        // that resumed while the user was reading the confirmation dialog.
+        if (!current.status.isFinished) return false
+        deleteFiles(current) // A failed disk deletion keeps the history available for retry.
+        writableDatabase.delete("jobs", "id = ?", arrayOf(id)) // Logs cascade; rate history stays.
         changed()
+        return true
     }
 
     @Synchronized

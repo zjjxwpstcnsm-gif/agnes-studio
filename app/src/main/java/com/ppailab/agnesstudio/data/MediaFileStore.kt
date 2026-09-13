@@ -5,11 +5,15 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import android.util.Base64
 import com.ppailab.agnesstudio.model.AttachmentRole
+import com.ppailab.agnesstudio.model.GenerationJob
 import com.ppailab.agnesstudio.model.MediaAttachment
 import com.ppailab.agnesstudio.network.executeCancellable
+import com.ppailab.agnesstudio.network.RelayUrlCachePolicy
 import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
+import java.nio.file.Files
+import java.nio.file.LinkOption
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -53,9 +57,11 @@ class MediaFileStore(
     }
 
     suspend fun asDataUri(attachment: MediaAttachment): String = withContext(Dispatchers.IO) {
-        attachment.remoteUrl?.let { return@withContext it }
-        val file = requireNotNull(attachment.localPath).let(::File)
-        require(file.exists()) { "素材文件已不存在：${attachment.displayName}" }
+        RelayUrlCachePolicy.reusableUrl(attachment)?.let { return@withContext it }
+        val file = attachment.localPath?.let(::File)
+        require(file != null && file.isFile) {
+            "素材链接已过期或不可用，且本地原文件不存在：${attachment.displayName}。请重新选择素材后提交。"
+        }
         require(file.length() <= 20L * 1024 * 1024) { "图片超过 20 MB，无法安全编码为 Data URI" }
         "data:${attachment.mimeType};base64," + Base64.encodeToString(file.readBytes(), Base64.NO_WRAP)
     }
@@ -85,6 +91,22 @@ class MediaFileStore(
                 FileOutputStream(target).use { output -> input.copyTo(output) }
             }
             target.absolutePath
+        }
+    }
+
+    fun deleteGeneratedResults(job: GenerationJob) {
+        val directory = File(context.filesDir, "generated").canonicalFile
+        // Include partial downloads that never reached result_path. Only these
+        // per-job names are owned results; imported/reference files are separate.
+        val names = listOf("image-${job.id}.png", "image-${job.id}.jpg",
+            "image-${job.id}.webp", "video-${job.id}.mp4")
+        for (name in names) {
+            val file = File(directory, name)
+            if (!Files.exists(file.toPath(), LinkOption.NOFOLLOW_LINKS)) continue
+            check(file.canonicalFile.parentFile == directory && !Files.isSymbolicLink(file.toPath()) &&
+                file.isFile && file.delete()) {
+                "无法删除本机结果文件：$name。记录已保留，请稍后重试。"
+            }
         }
     }
 

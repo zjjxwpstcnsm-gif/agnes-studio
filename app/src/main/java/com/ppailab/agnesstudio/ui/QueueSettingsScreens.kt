@@ -86,6 +86,8 @@ private enum class QueueFilter { ALL, ACTIVE, FAILED, CANCELLED }
 @Composable
 fun QueueScreen(viewModel: AppViewModel) {
     val jobs by viewModel.jobs.collectAsStateWithLifecycle()
+    val deletingJobIds by viewModel.deletingJobIds.collectAsStateWithLifecycle()
+    var pendingClearIds by remember { mutableStateOf<List<String>?>(null) }
     val settings by viewModel.appSettings.collectAsStateWithLifecycle()
     val selectedLogJobId by viewModel.selectedLogJobId.collectAsStateWithLifecycle()
     val selectedJobLogs by viewModel.selectedJobLogs.collectAsStateWithLifecycle()
@@ -105,7 +107,10 @@ fun QueueScreen(viewModel: AppViewModel) {
 
     Column(Modifier.fillMaxSize()) {
         ScreenHeader("任务队列", "$activeCount / ${settings.maxQueueSize} 个活动任务") {
-            TextButton(onClick = viewModel::clearFinishedJobs) {
+            TextButton(
+                onClick = { pendingClearIds = jobs.filter { it.status.isFinished }.map { it.id } },
+                enabled = jobs.any { it.status.isFinished } && deletingJobIds.isEmpty(),
+            ) {
                 Icon(Icons.Outlined.CleaningServices, contentDescription = null)
                 Spacer(Modifier.width(5.dp))
                 Text("清理")
@@ -147,7 +152,10 @@ fun QueueScreen(viewModel: AppViewModel) {
                     GenerationJobCard(
                         job = job,
                         onRetry = { viewModel.retryJob(job.id) },
+                        onDuplicate = { viewModel.duplicateJob(job.id) },
                         onCancel = { viewModel.cancelJob(job.id) },
+                        onDelete = { viewModel.deleteJob(job.id) },
+                        isDeleting = job.id in deletingJobIds,
                         onViewLogs = { viewModel.openJobLogs(job.id) },
                         onViewSettings = { settingsJobId = job.id },
                     )
@@ -156,6 +164,16 @@ fun QueueScreen(viewModel: AppViewModel) {
         }
     }
 
+    pendingClearIds?.let { ids ->
+        DeleteGenerationHistoryDialog(
+            count = ids.size,
+            onDismiss = { pendingClearIds = null },
+            onConfirm = {
+                pendingClearIds = null
+                viewModel.clearFinishedJobs(ids)
+            },
+        )
+    }
     selectedLogJobId?.let { jobId ->
         jobs.firstOrNull { it.id == jobId }?.let { job ->
             JobLogsDialog(job, selectedJobLogs, viewModel::closeJobLogs)

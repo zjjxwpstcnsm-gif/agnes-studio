@@ -15,8 +15,8 @@ android {
         manifestPlaceholders["appLabel"] = if (backgroundPreview) "Agnes Studio 后台版" else "Agnes Studio"
         minSdk = 26
         targetSdk = 35
-        versionCode = 11
-        versionName = "1.0.10"
+        versionCode = 13
+        versionName = "1.0.12"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
