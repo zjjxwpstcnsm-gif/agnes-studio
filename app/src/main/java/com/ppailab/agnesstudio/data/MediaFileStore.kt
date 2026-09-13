@@ -7,6 +7,7 @@ import android.util.Base64
 import com.ppailab.agnesstudio.model.AttachmentRole
 import com.ppailab.agnesstudio.model.MediaAttachment
 import com.ppailab.agnesstudio.network.executeCancellable
+import com.ppailab.agnesstudio.network.RelayUrlCachePolicy
 import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
@@ -53,9 +54,11 @@ class MediaFileStore(
     }
 
     suspend fun asDataUri(attachment: MediaAttachment): String = withContext(Dispatchers.IO) {
-        attachment.remoteUrl?.let { return@withContext it }
-        val file = requireNotNull(attachment.localPath).let(::File)
-        require(file.exists()) { "素材文件已不存在：${attachment.displayName}" }
+        RelayUrlCachePolicy.reusableUrl(attachment)?.let { return@withContext it }
+        val file = attachment.localPath?.let(::File)
+        require(file != null && file.isFile) {
+            "素材链接已过期或不可用，且本地原文件不存在：${attachment.displayName}。请重新选择素材后提交。"
+        }
         require(file.length() <= 20L * 1024 * 1024) { "图片超过 20 MB，无法安全编码为 Data URI" }
         "data:${attachment.mimeType};base64," + Base64.encodeToString(file.readBytes(), Base64.NO_WRAP)
     }

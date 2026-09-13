@@ -160,6 +160,7 @@ fun ImageScreen(viewModel: AppViewModel, onOpenQueue: () -> Unit) {
                     GenerationJobCard(
                         job = job,
                         onRetry = { viewModel.retryJob(job.id) },
+                        onDuplicate = { viewModel.duplicateJob(job.id) },
                         onCancel = { viewModel.cancelJob(job.id) },
                         onViewSettings = { settingsJobId = job.id },
                     )
@@ -445,6 +446,7 @@ fun VideoScreen(viewModel: AppViewModel, onOpenQueue: () -> Unit) {
                     GenerationJobCard(
                         job = job,
                         onRetry = { viewModel.retryJob(job.id) },
+                        onDuplicate = { viewModel.duplicateJob(job.id) },
                         onCancel = { viewModel.cancelJob(job.id) },
                         onViewSettings = { settingsJobId = job.id },
                     )

@@ -147,6 +147,7 @@ fun QueueScreen(viewModel: AppViewModel) {
                     GenerationJobCard(
                         job = job,
                         onRetry = { viewModel.retryJob(job.id) },
+                        onDuplicate = { viewModel.duplicateJob(job.id) },
                         onCancel = { viewModel.cancelJob(job.id) },
                         onViewLogs = { viewModel.openJobLogs(job.id) },
                         onViewSettings = { settingsJobId = job.id },

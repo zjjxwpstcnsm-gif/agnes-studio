@@ -239,11 +239,19 @@ fun GenerationJobCard(
     job: GenerationJob,
     onRetry: () -> Unit,
     onCancel: () -> Unit,
+    onDuplicate: () -> Boolean,
     onViewLogs: (() -> Unit)? = null,
     onViewSettings: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     var promptCopied by remember(job.id, job.prompt) { mutableStateOf(false) }
+    var duplicated by remember(job.id) { mutableStateOf(false) }
+    LaunchedEffect(duplicated) {
+        if (duplicated) {
+            delay(1_500)
+            duplicated = false
+        }
+    }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(promptCopied) {
         if (promptCopied) {
@@ -336,6 +344,14 @@ fun GenerationJobCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                OutlinedButton(
+                    onClick = { duplicated = onDuplicate() },
+                    enabled = !duplicated,
+                ) {
+                    Icon(Icons.Outlined.Refresh, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (duplicated) "已加入队列" else "复制并生成")
+                }
                 OutlinedButton(onClick = {
                     copyPromptToClipboard(context, job.prompt)
                     promptCopied = true

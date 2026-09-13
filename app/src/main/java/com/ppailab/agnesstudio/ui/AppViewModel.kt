@@ -1,6 +1,7 @@
 package com.ppailab.agnesstudio.ui
 
 import android.net.Uri
+import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -26,9 +27,11 @@ import com.ppailab.agnesstudio.model.VideoParameters
 import com.ppailab.agnesstudio.model.VideoTaskSpec
 import com.ppailab.agnesstudio.network.ErrorMapper
 import com.ppailab.agnesstudio.network.RatePolicy
+import com.ppailab.agnesstudio.network.RelayUrlCachePolicy
 import com.ppailab.agnesstudio.network.ThinkingStreamSplitter
 import com.ppailab.agnesstudio.network.VideoMediaPolicy
 import java.util.UUID
+import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -45,6 +48,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.decodeFromString
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 data class UiNotice(val message: String, val isError: Boolean = false)
@@ -107,6 +111,7 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
     val notices = _notices.asSharedFlow()
 
     private var chatJob: Job? = null
+    private var lastDuplicateAt: Long? = null
     private val explicitlyStoppedMessages = mutableSetOf<String>()
 
     fun selectConversation(id: String) {
@@ -553,6 +558,52 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
                 } else notice(receipt.error ?: "视频任务未入队", true)
             }.onFailure { notice(it.message ?: "视频参数不合法", true) }
         }
+    }
+
+    /** A new generation, including for completed/processing videos with a remote ID. */
+    fun duplicateJob(id: String): Boolean {
+        val now = SystemClock.elapsedRealtime()
+        if (lastDuplicateAt?.let { now - it < 1_500L } == true) return false
+        if (!graph.credentials.hasKey()) {
+            notice("请先在设置中填写 API Key", true)
+            return false
+        }
+        return runCatching {
+            val source = requireNotNull(graph.database.job(id)) { "原任务已被清理，无法复制" }
+            val attachments = when (source.modality) {
+                Modality.IMAGE -> {
+                    val spec = graph.json.decodeFromString<ImageTaskSpec>(source.specJson)
+                    graph.payloadBuilder.image(spec, spec.references.map { "data:image/png;base64,preview" })
+                    spec.references
+                }
+                Modality.VIDEO -> {
+                    val spec = graph.json.decodeFromString<VideoTaskSpec>(source.specJson)
+                    graph.payloadBuilder.validateVideo(spec)
+                    VideoMediaPolicy.validateForSubmission(spec.attachments, appSettings.value.temporaryUploadEnabled)
+                    spec.attachments
+                }
+            }
+            attachments.forEach { attachment ->
+                val usableLocal = attachment.localPath?.let { File(it).isFile && File(it).canRead() } == true
+                require(usableLocal || RelayUrlCachePolicy.reusableUrl(attachment) != null) {
+                    "素材链接已过期或不可用，且本地原文件不存在：${attachment.displayName}。请重新选择素材后提交。"
+                }
+            }
+            graph.database.duplicateJob(id, appSettings.value.maxQueueSize)
+        }.fold(
+            onSuccess = { receipt ->
+                if (receipt.accepted) {
+                    lastDuplicateAt = now
+                    graph.generationQueue.startFromUser()
+                    notice("已复制并加入生成队列 · 第 ${receipt.position} 位，按调用间隔自动发送")
+                } else notice(receipt.error ?: "任务未入队", true)
+                receipt.accepted
+            },
+            onFailure = {
+                notice(it.message ?: "无法复制该生成请求", true)
+                false
+            },
+        )
     }
 
     fun cancelJob(id: String) {
