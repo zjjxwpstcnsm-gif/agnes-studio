@@ -64,7 +64,7 @@ class HistoryDeletionTest {
     }
 
     @Test
-    fun `single delete removes saved images and videos with logs and survives database reopen`() = runBlocking {
+    fun `single delete removes saved images and videos with logs and survives database reopen`() = runBlocking<Unit> {
         for (modality in Modality.entries) {
             val id = enqueue(modality)
             val path = if (modality == Modality.IMAGE) files.saveBase64Image("aW1hZ2U=", id)
@@ -84,7 +84,7 @@ class HistoryDeletionTest {
     }
 
     @Test
-    fun `failed and cancelled history also removes partial downloads without result path`() = runBlocking {
+    fun `failed and cancelled history also removes partial downloads without result path`() = runBlocking<Unit> {
         for (status in listOf(JobStatus.FAILED, JobStatus.CANCELLED)) {
             val id = enqueue(Modality.VIDEO)
             database.updateJob(id, status)
@@ -96,7 +96,7 @@ class HistoryDeletionTest {
     }
 
     @Test
-    fun `deleting a source preserves reference materials copied jobs other results and rate history`() = runBlocking {
+    fun `deleting a source preserves reference materials copied jobs other results and rate history`() = runBlocking<Unit> {
         val reference = File(context.filesDir, "attachments/original.png").apply { parentFile?.mkdirs(); writeText("reference") }
         val spec = ImageTaskSpec("prompt", ImageParameters(), listOf(MediaAttachment(
             "reference", "original.png", "image/png", localPath = reference.absolutePath)))
@@ -117,7 +117,7 @@ class HistoryDeletionTest {
     }
 
     @Test
-    fun `active jobs and history resumed since confirmation are never deleted`() = runBlocking {
+    fun `active jobs and history resumed since confirmation are never deleted`() = runBlocking<Unit> {
         for (status in JobStatus.entries.filterNot { it.isFinished }) {
             val id = enqueue(Modality.IMAGE)
             database.updateJob(id, status)
@@ -134,7 +134,7 @@ class HistoryDeletionTest {
     }
 
     @Test
-    fun `unrelated result paths are not followed and filesystem errors keep history for retry`() = runBlocking {
+    fun `unrelated result paths are not followed and filesystem errors keep history for retry`() = runBlocking<Unit> {
         val unrelated = File(context.filesDir, "attachments/keep.png").apply { parentFile?.mkdirs(); writeText("keep") }
         val id = enqueue(Modality.IMAGE)
         database.updateJob(id, JobStatus.SUCCEEDED, resultPath = unrelated.absolutePath)
@@ -154,7 +154,7 @@ class HistoryDeletionTest {
     }
 
     @Test
-    fun `bulk selection deletes only its snapshot and skips a restarted item`() = runBlocking {
+    fun `bulk selection deletes only its snapshot and skips a restarted item`() = runBlocking<Unit> {
         val selected = List(3) { enqueue(Modality.IMAGE).also { database.updateJob(it, JobStatus.FAILED) } }
         val outputs = selected.associateWith { files.saveBase64Image("aW1hZ2U=", it) }
         val newlyFinished = enqueue(Modality.IMAGE)
@@ -169,7 +169,7 @@ class HistoryDeletionTest {
     }
 
     @Test
-    fun `delete waits for cancelled download callback and leaves no late file behind`() = runBlocking {
+    fun `delete waits for cancelled download callback and leaves no late file behind`() = runBlocking<Unit> {
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
         responder = { request ->
