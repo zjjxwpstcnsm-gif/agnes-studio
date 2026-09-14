@@ -28,6 +28,7 @@ import java.util.concurrent.ThreadLocalRandom
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
@@ -111,6 +112,16 @@ class QueueProcessor(
         activeJobs[jobId]?.cancelAndJoin()
     }
 
+    suspend fun deleteFinishedJob(jobId: String): Boolean {
+        if (database.job(jobId)?.status?.isFinished != true) return false
+        // Cancelled requests can still be finishing their response/download
+        // checkpoint. Wait for all file writes before removing their results.
+        awaitStopped(jobId)
+        return withContext(Dispatchers.IO) {
+            database.deleteFinishedJob(jobId, fileStore::deleteGeneratedResults)
+        }
+    }
+
     private suspend fun processOwned(
         job: GenerationJob,
         workerId: String,
@@ -119,12 +130,14 @@ class QueueProcessor(
         val operation = async(start = CoroutineStart.LAZY) { process(job, workerId, stopReason) }
         activeJobs[job.id] = operation
         try {
-            if (database.job(job.id)?.status == JobStatus.CANCELLED) operation.cancel()
+            val status = database.job(job.id)?.status
+            if (status == null || status.isFinished) operation.cancel()
             operation.await()
         } catch (cancelled: CancellationException) {
             // User cancellation stops only this item. A worker/system cancellation
             // must propagate out of the drain loop, never become a business failure.
-            if (!currentCoroutineContext().isActive || database.job(job.id)?.status != JobStatus.CANCELLED) {
+            val status = database.job(job.id)?.status
+            if (!currentCoroutineContext().isActive || (status != null && !status.isFinished)) {
                 throw cancelled
             }
         } finally {

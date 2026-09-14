@@ -27,7 +27,7 @@ enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
 @Serializable
 data class ChatParameters(
-    val model: String = "agnes-2.5-flash",
+    val model: String = ChatModel.DEFAULT,
     val systemPrompt: String = "You are a helpful assistant.",
     val temperature: Double = 0.7,
     val topP: Double = 1.0,
@@ -112,7 +112,10 @@ enum class JobStatus {
     RETRY_WAIT,
     SUCCEEDED,
     FAILED,
-    CANCELLED,
+    CANCELLED;
+
+    val isFinished: Boolean
+        get() = this == SUCCEEDED || this == FAILED || this == CANCELLED
 }
 
 enum class JobLogLevel { INFO, WARNING, ERROR }

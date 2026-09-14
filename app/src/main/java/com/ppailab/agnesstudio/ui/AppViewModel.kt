@@ -1,6 +1,7 @@
 package com.ppailab.agnesstudio.ui
 
 import android.net.Uri
+import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -10,6 +11,8 @@ import com.ppailab.agnesstudio.model.AttachmentRole
 import com.ppailab.agnesstudio.model.ChatConversation
 import com.ppailab.agnesstudio.model.ChatMessage
 import com.ppailab.agnesstudio.model.ChatParameters
+import com.ppailab.agnesstudio.model.ChatModel
+import com.ppailab.agnesstudio.network.ChatMediaResolver
 import com.ppailab.agnesstudio.model.ChatStreamState
 import com.ppailab.agnesstudio.model.ErrorKind
 import com.ppailab.agnesstudio.model.GenerationJob
@@ -26,9 +29,11 @@ import com.ppailab.agnesstudio.model.VideoParameters
 import com.ppailab.agnesstudio.model.VideoTaskSpec
 import com.ppailab.agnesstudio.network.ErrorMapper
 import com.ppailab.agnesstudio.network.RatePolicy
+import com.ppailab.agnesstudio.network.RelayUrlCachePolicy
 import com.ppailab.agnesstudio.network.ThinkingStreamSplitter
 import com.ppailab.agnesstudio.network.VideoMediaPolicy
 import java.util.UUID
+import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -45,6 +50,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.decodeFromString
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 data class UiNotice(val message: String, val isError: Boolean = false)
@@ -107,6 +113,9 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
     val notices = _notices.asSharedFlow()
 
     private var chatJob: Job? = null
+    private var lastDuplicateAt: Long? = null
+    private val _deletingJobIds = MutableStateFlow<Set<String>>(emptySet())
+    val deletingJobIds = _deletingJobIds.asStateFlow()
     private val explicitlyStoppedMessages = mutableSetOf<String>()
 
     fun selectConversation(id: String) {
@@ -154,7 +163,7 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
                 require(!key.isNullOrBlank()) { "请先填写 API Key" }
                 val settings = appSettings.value
                 graph.api.testKey(settings.baseUrl, key, settings.requestTimeoutSeconds)
-                notice("连接成功，Agnes 2.5 Flash 可用")
+                notice("连接成功，Agnes 3.0 Flash 可用")
             } catch (error: Throwable) {
                 notice(ErrorMapper.fromThrowable(error).userMessage, true)
             } finally {
@@ -194,6 +203,11 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
     fun updateVideoParameters(value: VideoParameters) = graph.settings.updateVideo(value)
 
     fun importAttachment(uri: Uri, role: AttachmentRole, target: AttachmentTarget) {
+        if (target == AttachmentTarget.CHAT && chatParameters.value.model == ChatModel.DEFAULT &&
+            !appSettings.value.temporaryUploadEnabled) {
+            notice("Agnes 3.0 Flash 使用图片 URL。请添加公开 HTTPS 图片 URL，或在设置中启用公开素材中转池后选择本地图片。", true)
+            return
+        }
         if (target == AttachmentTarget.VIDEO && !appSettings.value.temporaryUploadEnabled) {
             notice(
                 "本地视频素材需要先转换成 Agnes 可访问的公开 URL。请使用“素材 URL”，或在设置中启用公开素材中转池。",
@@ -370,15 +384,11 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
                 attempts++
                 waitForTextRateSlot(assistantId)
                 val rawHistory = graph.database.messages(conversationId).filterNot { it.id == assistantId }
-                val history = withContext(Dispatchers.IO) {
-                    rawHistory.map { message ->
-                        message.copy(attachments = message.attachments.map { attachment ->
-                            if (attachment.remoteUrl != null) attachment
-                            else attachment.copy(remoteUrl = graph.fileStore.asDataUri(attachment), localPath = null)
-                        })
-                    }
-                }
                 val parameters = chatParameters.value
+                val history = withContext(Dispatchers.IO) {
+                    val resolver = ChatMediaResolver(graph.fileStore, graph.uploader, graph.database)
+                    rawHistory.map { resolver.resolve(it, parameters.model, appSettings.value.temporaryUploadEnabled) }
+                }
                 val payload = graph.payloadBuilder.chat(parameters, history)
                 val key = graph.credentials.load().orEmpty()
                 try {
@@ -555,6 +565,53 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
         }
     }
 
+    /** A new generation, including for completed/processing videos with a remote ID. */
+    fun duplicateJob(id: String): Boolean {
+        if (id in _deletingJobIds.value) return false
+        val now = SystemClock.elapsedRealtime()
+        if (lastDuplicateAt?.let { now - it < 1_500L } == true) return false
+        if (!graph.credentials.hasKey()) {
+            notice("请先在设置中填写 API Key", true)
+            return false
+        }
+        return runCatching {
+            val source = requireNotNull(graph.database.job(id)) { "原任务已被清理，无法复制" }
+            val attachments = when (source.modality) {
+                Modality.IMAGE -> {
+                    val spec = graph.json.decodeFromString<ImageTaskSpec>(source.specJson)
+                    graph.payloadBuilder.image(spec, spec.references.map { "data:image/png;base64,preview" })
+                    spec.references
+                }
+                Modality.VIDEO -> {
+                    val spec = graph.json.decodeFromString<VideoTaskSpec>(source.specJson)
+                    graph.payloadBuilder.validateVideo(spec)
+                    VideoMediaPolicy.validateForSubmission(spec.attachments, appSettings.value.temporaryUploadEnabled)
+                    spec.attachments
+                }
+            }
+            attachments.forEach { attachment ->
+                val usableLocal = attachment.localPath?.let { File(it).isFile && File(it).canRead() } == true
+                require(usableLocal || RelayUrlCachePolicy.reusableUrl(attachment) != null) {
+                    "素材链接已过期或不可用，且本地原文件不存在：${attachment.displayName}。请重新选择素材后提交。"
+                }
+            }
+            graph.database.duplicateJob(id, appSettings.value.maxQueueSize)
+        }.fold(
+            onSuccess = { receipt ->
+                if (receipt.accepted) {
+                    lastDuplicateAt = now
+                    graph.generationQueue.startFromUser()
+                    notice("已复制并加入生成队列 · 第 ${receipt.position} 位，按调用间隔自动发送")
+                } else notice(receipt.error ?: "任务未入队", true)
+                receipt.accepted
+            },
+            onFailure = {
+                notice(it.message ?: "无法复制该生成请求", true)
+                false
+            },
+        )
+    }
+
     fun cancelJob(id: String) {
         graph.database.cancelJob(id)
         graph.queueProcessor.cancel(id)
@@ -564,7 +621,9 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
 
     fun retryJob(id: String) {
         viewModelScope.launch {
+            if (id in _deletingJobIds.value) return@launch
             graph.queueProcessor.awaitStopped(id)
+            if (id in _deletingJobIds.value || graph.database.job(id) == null) return@launch
             graph.database.retryJob(id)
             graph.database.addJobLog(id, JobLogLevel.INFO, "用户操作", "任务已手动重新排队")
             graph.generationQueue.startFromUser()
@@ -580,9 +639,40 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
         _selectedLogJobId.value = null
     }
 
-    fun clearFinishedJobs() {
-        graph.database.clearFinishedJobs()
-        notice("已清理完成、失败和取消的任务记录")
+    fun deleteJob(id: String) = clearFinishedJobs(listOf(id))
+
+    fun clearFinishedJobs(ids: List<String>) {
+        val targets = ids.distinct().filterNot { it in _deletingJobIds.value }
+        if (targets.isEmpty()) return
+        _deletingJobIds.value += targets
+        viewModelScope.launch {
+            var deleted = 0
+            var failed = 0
+            var skipped = 0
+            try {
+                for (id in targets) {
+                    try {
+                        if (graph.queueProcessor.deleteFinishedJob(id)) {
+                            deleted++
+                            if (_selectedLogJobId.value == id) closeJobLogs()
+                        } else skipped++
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        failed++
+                        notice(error.message ?: "删除失败，记录已保留，请重试", true)
+                    }
+                }
+                graph.generationQueue.kick()
+                notice(buildString {
+                    append("已删除 $deleted 条历史记录及对应本机结果")
+                    if (failed > 0) append("；$failed 条删除失败，记录已保留")
+                    if (skipped > 0) append("；$skipped 条已移除或重新执行，已跳过")
+                }, failed > 0)
+            } finally {
+                _deletingJobIds.value -= targets.toSet()
+            }
+        }
     }
 
     private fun notice(message: String, isError: Boolean = false) {

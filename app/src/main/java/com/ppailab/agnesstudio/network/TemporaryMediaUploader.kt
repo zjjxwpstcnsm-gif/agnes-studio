@@ -46,8 +46,15 @@ internal object RelayUrlCachePolicy {
         nowMillis: Long = System.currentTimeMillis(),
     ): String? {
         val url = attachment.remoteUrl ?: return null
-        if (attachment.localPath == null) return url
-        val expiresAt = attachment.remoteUrlExpiresAt ?: return url
+        val expiresAt = attachment.remoteUrlExpiresAt
+        if (expiresAt == null) {
+            val host = url.toHttpUrlOrNull()?.host.orEmpty()
+            val temporaryHost = host == "uguu.se" || host.endsWith(".uguu.se") ||
+                host == "litter.catbox.moe" || host == "litterbox.catbox.moe"
+            // Legacy local uploads without an expiry cannot be considered
+            // permanent. Keep user-supplied URLs without known expiry intact.
+            return url.takeUnless { temporaryHost && attachment.localPath != null }
+        }
         return url.takeIf { expiresAt > nowMillis + EXPIRY_SAFETY_MILLIS }
     }
 }

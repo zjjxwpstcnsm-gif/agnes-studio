@@ -33,6 +33,7 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Share
@@ -239,11 +240,22 @@ fun GenerationJobCard(
     job: GenerationJob,
     onRetry: () -> Unit,
     onCancel: () -> Unit,
+    onDuplicate: () -> Boolean,
+    onDelete: () -> Unit,
+    isDeleting: Boolean = false,
     onViewLogs: (() -> Unit)? = null,
     onViewSettings: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
+    var showDelete by remember(job.id, job.status) { mutableStateOf(false) }
     var promptCopied by remember(job.id, job.prompt) { mutableStateOf(false) }
+    var duplicated by remember(job.id) { mutableStateOf(false) }
+    LaunchedEffect(duplicated) {
+        if (duplicated) {
+            delay(1_500)
+            duplicated = false
+        }
+    }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(promptCopied) {
         if (promptCopied) {
@@ -336,6 +348,14 @@ fun GenerationJobCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                OutlinedButton(
+                    onClick = { duplicated = onDuplicate() },
+                    enabled = !duplicated && !isDeleting,
+                ) {
+                    Icon(Icons.Outlined.Refresh, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (duplicated) "已加入队列" else "复制并生成")
+                }
                 OutlinedButton(onClick = {
                     copyPromptToClipboard(context, job.prompt)
                     promptCopied = true
@@ -358,10 +378,17 @@ fun GenerationJobCard(
                         Text("调用日志")
                     }
                 }
+                if (job.status.isFinished) {
+                    TextButton(onClick = { showDelete = true }, enabled = !isDeleting) {
+                        Icon(Icons.Outlined.DeleteOutline, contentDescription = null)
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (isDeleting) "删除中…" else "删除记录")
+                    }
+                }
             }
 
             when (job.status) {
-                JobStatus.FAILED, JobStatus.CANCELLED -> OutlinedButton(onClick = onRetry) {
+                JobStatus.FAILED, JobStatus.CANCELLED -> OutlinedButton(onClick = onRetry, enabled = !isDeleting) {
                     Icon(Icons.Outlined.Refresh, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
                     Text("重新排队")
@@ -376,6 +403,29 @@ fun GenerationJobCard(
             }
         }
     }
+    if (showDelete && job.status.isFinished) {
+        DeleteGenerationHistoryDialog(
+            count = 1,
+            onDismiss = { showDelete = false },
+            onConfirm = {
+                showDelete = false
+                onDelete()
+            },
+        )
+    }
+}
+
+@Composable
+fun DeleteGenerationHistoryDialog(count: Int, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("删除 $count 条历史记录？") },
+        text = {
+            Text("将删除所选记录、调用日志及应用内保存的图片/视频结果，无法恢复。\n\n参考素材和已另存到相册或下载目录的副本会保留。")
+        },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("确认删除") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+    )
 }
 
 @Composable

@@ -9,6 +9,7 @@ import androidx.core.database.sqlite.transaction
 import com.ppailab.agnesstudio.model.ChatConversation
 import com.ppailab.agnesstudio.model.ChatMessage
 import com.ppailab.agnesstudio.model.ChatParameters
+import com.ppailab.agnesstudio.model.ChatModel
 import com.ppailab.agnesstudio.model.ErrorKind
 import com.ppailab.agnesstudio.model.GenerationJob
 import com.ppailab.agnesstudio.model.JobLog
@@ -114,6 +115,17 @@ class AppDatabase(
         if (oldVersion < 2) createJobLogsTable(db)
         if (oldVersion < 3) {
             db.execSQL("ALTER TABLE conversations ADD COLUMN parameters_json TEXT NOT NULL DEFAULT '{}'")
+        }
+        if (oldVersion < 4) {
+            db.rawQuery("SELECT id, parameters_json FROM conversations", null).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val raw = cursor.getString(1)
+                    val upgraded = ChatModel.upgradeLegacyParameters(raw, json)
+                    if (upgraded != raw) db.update("conversations", ContentValues().apply {
+                        put("parameters_json", upgraded)
+                    }, "id = ?", arrayOf(cursor.getString(0)))
+                }
+            }
         }
     }
 
@@ -230,6 +242,14 @@ class AppDatabase(
     ).use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.toMessage()) } }
 
     @Synchronized
+    fun updateMessageAttachments(id: String, attachments: List<MediaAttachment>) {
+        writableDatabase.update("messages", ContentValues().apply {
+            put("attachments_json", json.encodeToString(attachments))
+        }, "id = ?", arrayOf(id))
+        changed()
+    }
+
+    @Synchronized
     fun updateAssistantMessage(
         id: String,
         content: String,
@@ -285,6 +305,20 @@ class AppDatabase(
         } finally {
             changed()
         }
+    }
+
+    @Synchronized
+    fun duplicateJob(id: String, maxQueueSize: Int): QueueReceipt {
+        val source = job(id) ?: return QueueReceipt(false, error = "原任务已被清理，无法复制")
+        // Only the request snapshot is copied. enqueueJob creates a new ID,
+        // timestamps and execution state, and enforces the shared queue limit.
+        val receipt = enqueueJob(source.modality, source.prompt, source.specJson, maxQueueSize)
+        receipt.jobId?.let { newId ->
+            addJobLog(newId, JobLogLevel.INFO, "复制并生成",
+                "已复制原任务的提示词、参数和素材 · 第 ${receipt.position} 位",
+                "source_job_id=$id")
+        }
+        return receipt
     }
 
     @Synchronized
@@ -467,9 +501,15 @@ class AppDatabase(
     }
 
     @Synchronized
-    fun clearFinishedJobs() {
-        writableDatabase.delete("jobs", "status IN ('SUCCEEDED','FAILED','CANCELLED')", null)
+    fun deleteFinishedJob(id: String, deleteFiles: (GenerationJob) -> Unit): Boolean {
+        val current = job(id) ?: return false
+        // Recheck under the same lock as retry/duplicate: never delete a job
+        // that resumed while the user was reading the confirmation dialog.
+        if (!current.status.isFinished) return false
+        deleteFiles(current) // A failed disk deletion keeps the history available for retry.
+        writableDatabase.delete("jobs", "id = ?", arrayOf(id)) // Logs cascade; rate history stays.
         changed()
+        return true
     }
 
     @Synchronized
@@ -585,7 +625,7 @@ class AppDatabase(
 
     private companion object {
         const val DB_NAME = "agnes_studio.db"
-        const val DB_VERSION = 3
+        const val DB_VERSION = 4
         const val MAX_LOGS_PER_JOB = 500
         const val MAX_LOG_DETAILS = 40_000
     }
