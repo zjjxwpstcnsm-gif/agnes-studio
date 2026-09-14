@@ -1,6 +1,7 @@
 package com.ppailab.agnesstudio.network
 
 import com.ppailab.agnesstudio.model.ApiFailure
+import com.ppailab.agnesstudio.model.ChatModel
 import com.ppailab.agnesstudio.model.StreamEvent
 import java.io.IOException
 import java.util.concurrent.TimeUnit
@@ -69,12 +70,18 @@ class AgnesApiClient(
     }
 
     suspend fun testKey(baseUrl: String, apiKey: String, timeoutSeconds: Int) {
-        val payload = """{"model":"agnes-2.5-flash","messages":[{"role":"user","content":"Reply only: OK"}],"max_tokens":2,"stream":false}"""
-        executeJson(
+        val payload = """{"model":"${ChatModel.DEFAULT}","messages":[{"role":"user","content":"Reply only: OK"}],"max_tokens":32,"stream":false,"chat_template_kwargs":{"enable_thinking":false}}"""
+        val response = executeJson(
             requestBuilder(endpoint(baseUrl, "/v1/chat/completions"), apiKey)
                 .post(payload.toRequestBody(JSON_MEDIA_TYPE)).build(),
             timeoutSeconds,
         )
+        if (sseParser.parseNonStream(response.toString()).none { it is StreamEvent.TextDelta && it.text.isNotBlank() }) {
+            throw ApiException(ApiFailure(
+                com.ppailab.agnesstudio.model.ErrorKind.UNKNOWN,
+                "接口已响应，但 Agnes 3.0 Flash 未返回有效文本，请检查模型权限后重试。",
+            ))
+        }
     }
 
     suspend fun generateImage(

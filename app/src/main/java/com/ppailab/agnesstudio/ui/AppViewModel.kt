@@ -11,6 +11,8 @@ import com.ppailab.agnesstudio.model.AttachmentRole
 import com.ppailab.agnesstudio.model.ChatConversation
 import com.ppailab.agnesstudio.model.ChatMessage
 import com.ppailab.agnesstudio.model.ChatParameters
+import com.ppailab.agnesstudio.model.ChatModel
+import com.ppailab.agnesstudio.network.ChatMediaResolver
 import com.ppailab.agnesstudio.model.ChatStreamState
 import com.ppailab.agnesstudio.model.ErrorKind
 import com.ppailab.agnesstudio.model.GenerationJob
@@ -161,7 +163,7 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
                 require(!key.isNullOrBlank()) { "请先填写 API Key" }
                 val settings = appSettings.value
                 graph.api.testKey(settings.baseUrl, key, settings.requestTimeoutSeconds)
-                notice("连接成功，Agnes 2.5 Flash 可用")
+                notice("连接成功，Agnes 3.0 Flash 可用")
             } catch (error: Throwable) {
                 notice(ErrorMapper.fromThrowable(error).userMessage, true)
             } finally {
@@ -201,6 +203,11 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
     fun updateVideoParameters(value: VideoParameters) = graph.settings.updateVideo(value)
 
     fun importAttachment(uri: Uri, role: AttachmentRole, target: AttachmentTarget) {
+        if (target == AttachmentTarget.CHAT && chatParameters.value.model == ChatModel.DEFAULT &&
+            !appSettings.value.temporaryUploadEnabled) {
+            notice("Agnes 3.0 Flash 使用图片 URL。请添加公开 HTTPS 图片 URL，或在设置中启用公开素材中转池后选择本地图片。", true)
+            return
+        }
         if (target == AttachmentTarget.VIDEO && !appSettings.value.temporaryUploadEnabled) {
             notice(
                 "本地视频素材需要先转换成 Agnes 可访问的公开 URL。请使用“素材 URL”，或在设置中启用公开素材中转池。",
@@ -377,15 +384,11 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
                 attempts++
                 waitForTextRateSlot(assistantId)
                 val rawHistory = graph.database.messages(conversationId).filterNot { it.id == assistantId }
-                val history = withContext(Dispatchers.IO) {
-                    rawHistory.map { message ->
-                        message.copy(attachments = message.attachments.map { attachment ->
-                            if (attachment.remoteUrl != null) attachment
-                            else attachment.copy(remoteUrl = graph.fileStore.asDataUri(attachment), localPath = null)
-                        })
-                    }
-                }
                 val parameters = chatParameters.value
+                val history = withContext(Dispatchers.IO) {
+                    val resolver = ChatMediaResolver(graph.fileStore, graph.uploader, graph.database)
+                    rawHistory.map { resolver.resolve(it, parameters.model, appSettings.value.temporaryUploadEnabled) }
+                }
                 val payload = graph.payloadBuilder.chat(parameters, history)
                 val key = graph.credentials.load().orEmpty()
                 try {

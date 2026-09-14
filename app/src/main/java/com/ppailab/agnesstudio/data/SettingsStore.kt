@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.core.content.edit
 import com.ppailab.agnesstudio.model.AppSettings
 import com.ppailab.agnesstudio.model.ChatParameters
+import com.ppailab.agnesstudio.model.ChatModel
 import com.ppailab.agnesstudio.model.ImageParameters
 import com.ppailab.agnesstudio.model.VideoParameters
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,6 +16,16 @@ import kotlinx.serialization.json.Json
 
 class SettingsStore(context: Context, private val json: Json) {
     private val preferences = context.getSharedPreferences("agnes_settings", Context.MODE_PRIVATE)
+
+    init {
+        if (!preferences.getBoolean("chat_model_3_migrated", false)) {
+            val raw = preferences.getString(KEY_CHAT, null)
+            preferences.edit {
+                if (raw != null) putString(KEY_CHAT, ChatModel.upgradeLegacyParameters(raw, json))
+                putBoolean("chat_model_3_migrated", true)
+            }
+        }
+    }
 
     private val _app = MutableStateFlow(read(KEY_APP, AppSettings()))
     private val _chat = MutableStateFlow(read(KEY_CHAT, ChatParameters()))

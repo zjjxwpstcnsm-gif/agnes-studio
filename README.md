@@ -4,13 +4,14 @@
 
 ## 能力
 
-### 文本 · `agnes-2.5-flash`
+### 文本 · `agnes-3.0-flash`
 
 - 多轮对话与本地历史记录
 - OpenAI Chat Completions SSE 流式输出
 - Thinking 独立折叠展示；兼容独立 reasoning 字段和 `<think>` 标签
 - Tool Call 名称、参数与等待状态卡片；由用户填写工具执行结果后继续对话
-- 图片视觉输入（本地图片转 Data URI，或公开 HTTPS URL）
+- 图片视觉输入：公开 HTTPS URL；3.0 本地图片在明确开启素材中转后上传，缓存链接，过期后重传
+- 512K 上下文、最大输出 65,536 Token；旧默认 2.5 Flash 会话和设置升级到 3.0，自定义模型与其他参数保留
 - 可设置模型、System Prompt、temperature、top_p、max_tokens、stream、thinking、tools、tool_choice
 - 高级 JSON 可透传未来新增参数，核心字段仍由可视化控件校验并覆盖
 - “停止生成”保留已收到内容，不丢失半截答案
@@ -72,7 +73,7 @@
 
 ## 安装
 
-当前版本为 `1.0.12 (13)`，新增单条删除历史记录和批量清理本机生成结果；保留一键复制生成与后台恢复能力。改动与验收见 [`docs/FIX_1.0.12.md`](docs/FIX_1.0.12.md)。交付后台版继续使用固定签名，可覆盖 1.0.10 / 1.0.11 后台版并保留数据。
+当前版本为 `1.0.13 (14)`，接入 Agnes 3.0 Flash，保留 1.0.12 的历史请求复制、删除和后台生成能力。新版本说明见 [`docs/FIX_1.0.13.md`](docs/FIX_1.0.13.md)。
 
 安装前请先阅读下方签名限制，再按以下方式操作：
 
@@ -112,7 +113,7 @@ GitHub Actions 的 `Android CI` 工作流会执行 Lint、单元/恢复测试，
 
 官方资料：
 
-- [Agnes 2.5 Flash](https://wiki.agnes-ai.com/en/docs/agnes-25-flash)
+- [Agnes 3.0 Flash](https://www.agnes-ai.com/zh-Hans/docs/agnes-30-flash)
 - [Agnes Image 2.5 Flash](https://www.agnes-ai.com/zh-Hans/docs/agnes-image-25-flash)
 - [Agnes Video 2.5 Flash](https://www.agnes-ai.com/zh-Hans/docs/agnes-video-25-flash)
 - [Agnes Video 2.5](https://wiki.agnes-ai.com/zh-Hans/docs/agnes-video-25)

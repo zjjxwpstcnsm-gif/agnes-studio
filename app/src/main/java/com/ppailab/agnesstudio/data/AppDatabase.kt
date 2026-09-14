@@ -9,6 +9,7 @@ import androidx.core.database.sqlite.transaction
 import com.ppailab.agnesstudio.model.ChatConversation
 import com.ppailab.agnesstudio.model.ChatMessage
 import com.ppailab.agnesstudio.model.ChatParameters
+import com.ppailab.agnesstudio.model.ChatModel
 import com.ppailab.agnesstudio.model.ErrorKind
 import com.ppailab.agnesstudio.model.GenerationJob
 import com.ppailab.agnesstudio.model.JobLog
@@ -114,6 +115,17 @@ class AppDatabase(
         if (oldVersion < 2) createJobLogsTable(db)
         if (oldVersion < 3) {
             db.execSQL("ALTER TABLE conversations ADD COLUMN parameters_json TEXT NOT NULL DEFAULT '{}'")
+        }
+        if (oldVersion < 4) {
+            db.rawQuery("SELECT id, parameters_json FROM conversations", null).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val raw = cursor.getString(1)
+                    val upgraded = ChatModel.upgradeLegacyParameters(raw, json)
+                    if (upgraded != raw) db.update("conversations", ContentValues().apply {
+                        put("parameters_json", upgraded)
+                    }, "id = ?", arrayOf(cursor.getString(0)))
+                }
+            }
         }
     }
 
@@ -228,6 +240,14 @@ class AppDatabase(
         """.trimIndent(),
         arrayOf(conversationId),
     ).use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.toMessage()) } }
+
+    @Synchronized
+    fun updateMessageAttachments(id: String, attachments: List<MediaAttachment>) {
+        writableDatabase.update("messages", ContentValues().apply {
+            put("attachments_json", json.encodeToString(attachments))
+        }, "id = ?", arrayOf(id))
+        changed()
+    }
 
     @Synchronized
     fun updateAssistantMessage(
@@ -605,7 +625,7 @@ class AppDatabase(
 
     private companion object {
         const val DB_NAME = "agnes_studio.db"
-        const val DB_VERSION = 3
+        const val DB_VERSION = 4
         const val MAX_LOGS_PER_JOB = 500
         const val MAX_LOG_DETAILS = 40_000
     }

@@ -88,6 +88,7 @@ import com.ppailab.agnesstudio.model.ChatConversation
 import com.ppailab.agnesstudio.model.ChatMessage
 import com.ppailab.agnesstudio.model.CollapsibleTextFormatter
 import com.ppailab.agnesstudio.model.ChatParameters
+import com.ppailab.agnesstudio.model.ChatModel
 import com.ppailab.agnesstudio.model.MessageState
 import com.ppailab.agnesstudio.model.ToolCall
 import kotlinx.coroutines.delay
@@ -642,7 +643,7 @@ private fun ChatSettingsSheet(
                     onValueChange = { draft = draft.copy(model = it) },
                     label = { Text("模型 ID") },
                     modifier = Modifier.fillMaxWidth(),
-                    supportingText = { Text("默认：agnes-2.5-flash") },
+                    supportingText = { Text("默认：${ChatModel.DEFAULT} · 512K 上下文 · 最大输出 65,536 Token") },
                 )
             }
             item {
@@ -683,7 +684,7 @@ private fun ChatSettingsSheet(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("Thinking 模式")
-                        Text("通过 chat_template_kwargs.enable_thinking", style = MaterialTheme.typography.bodySmall)
+                        Text("开启后更充分地拆解任务；关闭可更快获得回答", style = MaterialTheme.typography.bodySmall)
                     }
                     Switch(draft.enableThinking, { draft = draft.copy(enableThinking = it) })
                 }

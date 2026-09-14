@@ -1,20 +1,22 @@
 # Agnes API 映射
 
-以下为应用 1.0.8 使用的接口与字段。本版本已通过 CI 编译、Lint 和 42 条单元/Robolectric 测试，尚未完成真实服务调用验收。界面字段会覆盖高级 JSON 中同名的核心字段，避免原始 JSON 绕过必要校验。
+以下为应用 1.0.13 使用的接口与字段。文本部分于 2026-09-14 对照 [Agnes 3.0 Flash 官方文档](https://www.agnes-ai.com/zh-Hans/docs/agnes-30-flash) 更新。界面字段覆盖高级 JSON 中同名的核心字段。
 
 ## 文本
 
 | 项目 | 值 |
 |---|---|
 | Endpoint | `POST /v1/chat/completions` |
-| 默认模型 | `agnes-2.5-flash` |
+| 默认模型 | `agnes-3.0-flash` |
 | 历史 | `messages[]`，含 system/user/assistant/tool |
 | 采样 | `temperature`、`top_p`、`max_tokens` |
 | 流式 | `stream`；解析标准 SSE `data:` 事件与 `[DONE]` |
 | Thinking | `chat_template_kwargs.enable_thinking`；显示 `reasoning_content` / `reasoning` / `thinking` / `<think>` |
 | 工具 | `tools`、`tool_choice`、assistant `tool_calls`、tool `tool_call_id` |
-| 图片 | message content 中的 `image_url`，支持 HTTPS URL 和 Data URI |
+| 图片 | message content 中的 `image_url`，3.0 使用公开 HTTPS URL；本地图片在用户开启素材中转后上传并持久缓存 |
 | 扩展 | 高级 JSON 对象 |
+
+3.0 上下文窗口为 512K。当前继续使用 Chat Completions；官方新增 Responses / Messages 接口无需作为额外协议接入即可使用模型。Thinking 总是显式发送 true/false。连接测试使用 3.0、关闭 Thinking，且检查有无有效文本。
 
 客户端最大输出令牌校验范围为 1–65,536；temperature 为 0–2；top_p 为 0–1。
 

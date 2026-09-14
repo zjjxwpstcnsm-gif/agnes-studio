@@ -3,6 +3,7 @@ package com.ppailab.agnesstudio.network
 import com.ppailab.agnesstudio.model.AttachmentRole
 import com.ppailab.agnesstudio.model.ChatMessage
 import com.ppailab.agnesstudio.model.ChatParameters
+import com.ppailab.agnesstudio.model.ChatModel
 import com.ppailab.agnesstudio.model.ImageResponseFormat
 import com.ppailab.agnesstudio.model.ImageTaskSpec
 import com.ppailab.agnesstudio.model.ToolCall
@@ -30,7 +31,7 @@ class PayloadBuilder(private val json: Json) {
         val extra = parseObject(parameters.extraJson, "文本高级 JSON")
         val tools = parseArray(parameters.toolsJson, "工具定义")
         return buildJsonObject {
-            extra.forEach { (key, value) -> put(key, value) }
+            extra.filterKeys { it != "tools" && it != "tool_choice" }.forEach { (key, value) -> put(key, value) }
             put("model", parameters.model)
             put("messages", buildJsonArray {
                 if (parameters.systemPrompt.isNotBlank()) {
@@ -39,18 +40,16 @@ class PayloadBuilder(private val json: Json) {
                         put("content", parameters.systemPrompt)
                     })
                 }
-                messages.forEach { add(chatMessage(it)) }
+                messages.forEach { add(chatMessage(it, parameters.model == ChatModel.DEFAULT)) }
             })
             put("temperature", parameters.temperature)
             put("top_p", parameters.topP)
             put("max_tokens", parameters.maxTokens)
             put("stream", parameters.stream)
-            if (parameters.enableThinking) {
-                put("chat_template_kwargs", mergeObjects(
-                    extra["chat_template_kwargs"] as? JsonObject,
-                    buildJsonObject { put("enable_thinking", true) },
-                ))
-            }
+            put("chat_template_kwargs", mergeObjects(
+                extra["chat_template_kwargs"] as? JsonObject,
+                buildJsonObject { put("enable_thinking", parameters.enableThinking) },
+            ))
             if (tools.isNotEmpty()) {
                 put("tools", tools)
                 put("tool_choice", toolChoice(parameters.toolChoice))
@@ -184,7 +183,7 @@ class PayloadBuilder(private val json: Json) {
         }
     }
 
-    private fun chatMessage(message: ChatMessage): JsonObject = buildJsonObject {
+    private fun chatMessage(message: ChatMessage, requireHttpsImages: Boolean): JsonObject = buildJsonObject {
         put("role", message.role)
         if (message.attachments.isEmpty()) {
             put("content", message.content)
@@ -196,6 +195,9 @@ class PayloadBuilder(private val json: Json) {
                 })
                 message.attachments.forEach { media ->
                     val url = media.remoteUrl ?: media.localPath.orEmpty()
+                    require(!requireHttpsImages || url.toHttpUrlOrNull()?.isHttps == true) {
+                        "Agnes 3.0 Flash 图片需要公开 HTTPS URL；本地图片请先启用公开素材中转池。"
+                    }
                     add(buildJsonObject {
                         put("type", "image_url")
                         put("image_url", buildJsonObject { put("url", url) })
