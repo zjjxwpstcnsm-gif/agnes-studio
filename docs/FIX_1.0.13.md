@@ -17,3 +17,11 @@
 版本 `1.0.13 (14)`，交付包名 `com.ppailab.agnesstudio.background`。交付时复用 1.0.10–1.0.12 后台版私有证书，核对与 1.0.12 签名一致。证书不进入仓库或 CI。
 
 官方依据：[Agnes 3.0 Flash](https://www.agnes-ai.com/zh-Hans/docs/agnes-30-flash)，核对日期 2026-09-14。
+
+## 已完成验收
+
+- [Android CI 34830027366](https://github.com/zjjxwpstcnsm-gif/agnes-studio/actions/runs/34830027366)：80 项单元/Robolectric 测试全部通过，0 失败、0 错误、0 跳过；Lint 0 错误、20 条警告；主包、后台版与仪器测试 APK 编译成功。仪器测试未在设备运行。
+- APK 包名、版本号和签名已核验：`com.ppailab.agnesstudio.background` / `1.0.13 (14)`，与 1.0.12 后台版签名一致。
+- 证书 SHA-256：`1baf80c86e2a11d37ea8fa93c4b7183cfdd0320dcf38e4dbad650dd3c6c430b9`。
+- 交付 APK SHA-256：`a843537fb629fd3cf68657b8c924cae2d3183dcbf975b7f43704988bead4b8f2`，22,230,925 字节。
+- [PR #2](https://github.com/zjjxwpstcnsm-gif/agnes-studio/pull/2) 已合入主线，包含 PR #1 的历史复制和删除功能。未调用真实 Agnes 服务，未连接 Android 真机。
