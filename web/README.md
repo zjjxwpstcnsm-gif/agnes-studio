@@ -11,7 +11,11 @@
 3. 应用连接。Key 仅保留在当前页面内存中，刷新后需重新填写
 4. 通过创作工作台提交图片/视频，或进入灵感对话进行多轮聊天
 
-**重要：GitHub Pages 只托管静态前端，不是 API 代理。** 2026-10-01 的无凭据 OPTIONS 检查发现，`https://apihub.agnes-ai.com` 的相关接口返回 `Access-Control-Allow-Headers: *`，没有显式允许 `Authorization`；浏览器不能以通配符代替该请求头授权。官方地址的直接 Bearer 调用可能因此被 CORS 拦截。这与 Key 是否有效、余额是否充足不同。需要 Agnes 正确配置 CORS，或你自己部署/信任的 HTTPS API 网关。不要将 Key 发给陌生的“免费跨域代理”，也不要关闭浏览器安全保护。
+**重要：GitHub Pages 只托管静态前端，不是 API 代理。** API 请求由浏览器直接发送，真实可用性取决于服务的 CORS、网络、Key 权限与账户额度。
+
+2026-10-01 的验证有两类不同证据：无凭据 OPTIONS 检查看到了 `Access-Control-Allow-Headers: *`，未显式列出 `Authorization`，属于需要注意的兼容性信号；但随后在已部署页面的云端 Chromium 浏览器中，以明确无效的测试字符串调用 `GET /v1/models`，**实际收到了可读的 Key/权限拒绝响应**，没有出现 CORS 阻断。因此不能据 OPTIONS 结果断言官方 API 在所有浏览器里都不可直连。
+
+本次未使用有效 API Key 执行真实生成，不验证真实账户权限、额度或图片/视频生成成功率。生成流程的自动化验证使用模拟 API。若你遇到实际 CORS 错误，应由服务修正 CORS，或使用自己部署/信任的 HTTPS API 网关。不要将 Key 发给陌生的“免费跨域代理”，也不要关闭浏览器安全保护。
 
 一个兼容网关必须：
 

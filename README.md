@@ -9,7 +9,7 @@
 - 访问：<https://zjjxwpstcnsm-gif.github.io/agnes-studio/>
 - 功能：多轮流式对话、图片/视频创作、任务记录、作品预览与本机数据导出
 - 自带 API Key；Key 只保留在当前网页会话中，不包含在公开代码或站点构建产物中
-- GitHub Pages 为静态站点，实际生成需要支持浏览器 CORS 的 Agnes API 服务；官方直连当前有 Authorization 跨域限制，详情见 [`web/README.md`](web/README.md)
+- GitHub Pages 为静态站点，实际生成需要支持浏览器 CORS 的 Agnes API 服务；真实账户生成尚未验证，网络、CORS 与账户权限可能影响使用，详情见 [`web/README.md`](web/README.md)
 - Android 与网页数据独立；网页关闭后不能像 Android 前台服务一样持续运行
 
 本地开发、测试和 Pages 部署说明见 [`web/README.md`](web/README.md)。
