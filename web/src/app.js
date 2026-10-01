@@ -393,12 +393,15 @@ function bind() {
         }),
       );
   document.querySelectorAll("[data-conversation]").forEach((el) =>
-    el.addEventListener("click", () => {
+    el.addEventListener("click", async () => {
       currentChatId = el.dataset.conversation;
       chatDraft = "";
       chatImage = "";
-      persistSoon();
-      render();
+      // Commit the selected conversation before showing it, including immediate reloads.
+      try {
+        await persist();
+        render();
+      } catch { /* persist already reports the storage error */ }
     }),
   );
   $("#chat-form")?.addEventListener("submit", sendChat);
