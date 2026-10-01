@@ -70,7 +70,7 @@ npm run build
 node scripts/serve.mjs --dist
 ```
 
-发布目录是 `web/dist/`；不包含服务端、API Key 或第三方运行时依赖。Playwright 是开发依赖。测试使用拦截的模拟 API 响应，不消耗真实 Agnes 额度；通过模拟测试不代表真实账户生成权限已验证。
+发布目录是 `web/dist/`；运行时资源使用内容指纹目录，避免更新后混用浏览器缓存的旧脚本。浏览器测试针对该实际发布产物执行。不包含服务端、API Key 或第三方运行时依赖。Playwright 是开发依赖。测试使用拦截的模拟 API 响应，不消耗真实 Agnes 额度；通过模拟测试不代表真实账户生成权限已验证。
 
 ## GitHub Pages
 

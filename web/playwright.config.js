@@ -20,7 +20,7 @@ export default defineConfig({
       : {},
   },
   webServer: {
-    command: 'npm run dev',
+    command: 'npm run build && node scripts/serve.mjs --dist',
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: !process.env.CI,
     timeout: 15_000,
