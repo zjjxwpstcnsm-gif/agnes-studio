@@ -1,6 +1,20 @@
-# Agnes Studio for Android
+# Agnes Studio · Android & Web
 
 一个原生 Android 全模态客户端：填入 Agnes API Key 后即可进行多轮文本对话、图片生成/编辑和视频生成。界面与任务状态围绕“提交后发生了什么”设计，限流、排队、重试和远端处理进度均会直接显示。
+
+## 网页版
+
+新增独立的浏览器创作工作台，支持桌面和手机浏览器，保留原生 Android 工程。
+
+- 访问：<https://zjjxwpstcnsm-gif.github.io/agnes-studio/>
+- 功能：多轮流式对话、图片/视频创作、任务记录、作品预览与本机数据导出
+- 自带 API Key；Key 只保留在当前网页会话中，不包含在公开代码或站点构建产物中
+- GitHub Pages 为静态站点，实际生成需要支持浏览器 CORS 的 Agnes API 服务；官方直连当前有 Authorization 跨域限制，详情见 [`web/README.md`](web/README.md)
+- Android 与网页数据独立；网页关闭后不能像 Android 前台服务一样持续运行
+
+本地开发、测试和 Pages 部署说明见 [`web/README.md`](web/README.md)。
+
+以下为 Android 版详细说明。
 
 ## 能力
 

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#202a25" />
+    <meta
+      name="description"
+      content="Agnes Studio 网页版：在浏览器中进行 AI 对话、图片创作和视频生成。自带 API Key，历史记录保存在本机。"
+    />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' https:; object-src 'none'; base-uri 'self'; form-action 'self'"
+    />
+    <title>Agnes Studio · 创作工作台</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./src/styles.css" />
+    <script type="module" src="./src/app.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳至主内容</a>
+    <div id="app"><p class="loading">正在打开 Agnes Studio…</p></div>
+    <div id="toast" role="status" aria-live="polite"></div>
+    <noscript
+      >Agnes Studio 需要启用 JavaScript。API Key
+      由你自行提供，数据保存在当前浏览器。</noscript
+    >
+  </body>
+</html>
