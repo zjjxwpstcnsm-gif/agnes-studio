@@ -232,13 +232,17 @@ test('video polls no sooner than 30 seconds, then displays completed media', asy
   await expect(page.locator('.job-card .status')).toHaveText('生成中');
   const queueState = JSON.parse(await getStoredData(page)).values.find(value => Array.isArray(value?.jobs));
   const acceptedAt = queueState.jobs[0].remoteAcceptedAt;
+  await page.locator('.job-card details summary').click();
+  await expect(page.locator('.job-card details')).toHaveAttribute('open', '');
   const now = await page.evaluate(() => Date.now());
   await page.clock.runFor(acceptedAt + 29_999 - now);
   expect(pollTimes).toHaveLength(0);
+  await expect(page.locator('.job-card details')).toHaveAttribute('open', '');
   await page.clock.runFor(1_001);
   await expect.poll(() => pollTimes.length).toBe(1);
   expect(pollTimes[0] - acceptedAt).toBeGreaterThanOrEqual(30_000);
   await expect(page.locator('.job-card')).toContainText('服务端进度：50%');
+  await expect(page.locator('.job-card details')).toHaveAttribute('open', '');
   await page.clock.runFor(28_000);
   expect(pollTimes).toHaveLength(1);
   await page.clock.runFor(3_000);
