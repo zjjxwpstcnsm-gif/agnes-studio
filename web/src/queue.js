@@ -77,7 +77,7 @@ export class GenerationQueue {
   constructor({ storage = createStorage(), api = defaultApi, getSettings = () => ({}), getApiKey,
     onChange, now = () => Date.now(), locks = globalThis.navigator?.locks,
     channelFactory = typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined' ? name => new BroadcastChannel(name) : null,
-    setTimer = setTimeout, clearTimer = clearTimeout, maxPollRetries = 5, maxSubmitRetries = 3, maxConcurrent = 2,
+    setTimer = (...args) => globalThis.setTimeout(...args), clearTimer = (...args) => globalThis.clearTimeout(...args), maxPollRetries = 5, maxSubmitRetries = 3, maxConcurrent = 2,
     autoStart = true } = {}) {
     this.storage = storage;
     this.api = api;

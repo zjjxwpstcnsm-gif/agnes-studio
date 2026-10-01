@@ -435,3 +435,33 @@ test('poll Retry-After cannot be shortened by manual refresh', async () => {
   assert.equal(h.queue.list()[0].nextRunAt, 220_000);
   h.queue.dispose();
 });
+
+test('default timers preserve the browser Window receiver instead of using the queue as this', () => {
+  const originalSet = globalThis.setTimeout;
+  const originalClear = globalThis.clearTimeout;
+  let scheduled = 0, cleared = 0;
+  try {
+    globalThis.setTimeout = function (callback, delay) {
+      assert.equal(this, globalThis, 'setTimeout must retain its host receiver');
+      assert.equal(typeof callback, 'function');
+      assert.equal(delay, 25);
+      scheduled += 1;
+      return 123;
+    };
+    globalThis.clearTimeout = function (timer) {
+      assert.equal(this, globalThis, 'clearTimeout must retain its host receiver');
+      assert.equal(timer, 123);
+      cleared += 1;
+    };
+    const queue = createQueue({ autoStart: false, locks: null, channelFactory: null });
+    queue.isLeader = true;
+    queue._wake(25);
+    queue._wake(25);
+    queue.dispose();
+    assert.equal(scheduled, 2);
+    assert.equal(cleared, 2);
+  } finally {
+    globalThis.setTimeout = originalSet;
+    globalThis.clearTimeout = originalClear;
+  }
+});
